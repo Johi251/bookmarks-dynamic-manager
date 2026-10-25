@@ -1,0 +1,19 @@
+{
+  "name": "Bookmarks Dynamic Manager",
+  "short_name": "Bookmarks DM",
+  "description": "Lokale, private Lesezeichen-Verwaltung mit automatischer Multi-Kategorisierung und dynamischen Sammlungen.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1216",
+  "theme_color": "#0f1216",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
