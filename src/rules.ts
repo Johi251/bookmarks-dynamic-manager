@@ -79,5 +79,19 @@ export function createSeedState(): AppState {
       source: 'seed' as const,
     };
   });
-  return { version: 1, bookmarks: [], categories, rules: DEFAULT_RULES };
+  return {
+    version: 2,
+    bookmarks: [],
+    categories,
+    rules: DEFAULT_RULES,
+    glossary: [],
+    dynamicGroups: [],
+    settings: {
+      favorites: [],
+      startMinimized: false,
+      aiProvider: 'local',
+      aiEndpoint: '',
+      aiModel: '',
+    },
+  };
 }

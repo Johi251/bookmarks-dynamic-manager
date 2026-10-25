@@ -1,3 +1,5 @@
+import Icon from './Icon';
+
 interface Props {
   query: string;
   onQuery: (q: string) => void;
@@ -5,12 +7,34 @@ interface Props {
   onTab: (t: 'bookmarks' | 'curated') => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
+  minimized: boolean;
+  onToggleMinimized: () => void;
+  shortcutLabel: string;
+  onPalette: () => void;
   onAdd: () => void;
   onImport: () => void;
   onRules: () => void;
+  onGlossary: () => void;
+  onSettings: () => void;
 }
 
-export default function Toolbar({ query, onQuery, tab, onTab, theme, onToggleTheme, onAdd, onImport, onRules }: Props) {
+export default function Toolbar({
+  query,
+  onQuery,
+  tab,
+  onTab,
+  theme,
+  onToggleTheme,
+  minimized,
+  onToggleMinimized,
+  shortcutLabel,
+  onPalette,
+  onAdd,
+  onImport,
+  onRules,
+  onGlossary,
+  onSettings,
+}: Props) {
   return (
     <div className="toolbar">
       <div className="tabs" role="tablist">
@@ -21,25 +45,41 @@ export default function Toolbar({ query, onQuery, tab, onTab, theme, onToggleThe
           Empfehlungen
         </button>
       </div>
-      <input
-        className="search"
-        type="search"
-        placeholder="Suchen — Titel, URL, Tags, Kategorien …"
-        value={query}
-        onChange={(e) => onQuery(e.target.value)}
-        aria-label="Lesezeichen durchsuchen"
-      />
+      <div className="search-wrap">
+        <Icon name="search" size={14} className="search-icon" />
+        <input
+          className="search"
+          type="search"
+          placeholder="Suchen — Titel, URL, Tags, Kategorien …"
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          aria-label="Lesezeichen durchsuchen"
+        />
+      </div>
+      <button className="btn icon" onClick={onPalette} title={`Schnellzugriff öffnen (${shortcutLabel})`}>
+        <Icon name="command" size={15} />
+      </button>
       <button className="btn primary" onClick={onAdd} title="Lesezeichen hinzufügen">
-        + Hinzufügen
+        <Icon name="plus" size={14} /> Hinzufügen
       </button>
       <button className="btn" onClick={onImport} title="Browser-Export oder JSON importieren">
-        ⬆ Import
+        <Icon name="upload" size={14} /> Import
+      </button>
+      <button className="btn" onClick={onGlossary} title="Glossar: eigene Begriffsketten verwalten">
+        <Icon name="book" size={14} /> Glossar
       </button>
       <button className="btn" onClick={onRules} title="Kategorisierungs-Regeln anzeigen und bearbeiten">
-        ⚙ Regeln
+        <Icon name="settings" size={14} /> Regeln
+      </button>
+      <button className="btn" onClick={onSettings} title="Einstellungen (Start, Favoriten, KI, Tastenkürzel)">
+        <Icon name="layers" size={14} />
+        <span className="visually-hidden">Einstellungen</span>
+      </button>
+      <button className="btn icon" onClick={onToggleMinimized} title={minimized ? 'Vollansicht öffnen' : 'In Kompaktmodus minimieren'}>
+        <Icon name={minimized ? 'maximize' : 'minimize'} size={15} />
       </button>
       <button className="btn icon" onClick={onToggleTheme} title="Hell/Dunkel umschalten">
-        {theme === 'dark' ? '☀' : '🌙'}
+        <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15} />
       </button>
     </div>
   );

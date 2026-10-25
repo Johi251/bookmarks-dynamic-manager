@@ -105,7 +105,321 @@
         source: "seed"
       };
     });
-    return { version: 1, bookmarks: [], categories, rules: DEFAULT_RULES };
+    return {
+      version: 2,
+      bookmarks: [],
+      categories,
+      rules: DEFAULT_RULES,
+      glossary: [],
+      dynamicGroups: [],
+      settings: {
+        favorites: [],
+        startMinimized: false,
+        aiProvider: "local",
+        aiEndpoint: "",
+        aiModel: ""
+      }
+    };
+  }
+
+  // src/ai/engine.ts
+  var STOPWORDS = /* @__PURE__ */ new Set([
+    // Deutsch
+    "und",
+    "oder",
+    "der",
+    "die",
+    "das",
+    "den",
+    "dem",
+    "des",
+    "ein",
+    "eine",
+    "einer",
+    "eines",
+    "einem",
+    "einen",
+    "ist",
+    "sind",
+    "war",
+    "waren",
+    "wird",
+    "werden",
+    "wurde",
+    "wurden",
+    "f\xFCr",
+    "mit",
+    "von",
+    "vom",
+    "zum",
+    "zur",
+    "auf",
+    "aus",
+    "bei",
+    "nach",
+    "\xFCber",
+    "unter",
+    "vor",
+    "durch",
+    "gegen",
+    "ohne",
+    "um",
+    "an",
+    "am",
+    "im",
+    "in",
+    "nicht",
+    "auch",
+    "als",
+    "wie",
+    "wenn",
+    "dann",
+    "noch",
+    "nur",
+    "schon",
+    "sehr",
+    "mehr",
+    "kann",
+    "muss",
+    "seite",
+    "seiten",
+    "website",
+    "webseite",
+    "homepage",
+    "startseite",
+    "artikel",
+    "beitrag",
+    "blog",
+    "news",
+    "neue",
+    "neuer",
+    "neues",
+    "alle",
+    "aller",
+    "alles",
+    "hier",
+    "dort",
+    "diese",
+    "dieser",
+    "dieses",
+    "mein",
+    "meine",
+    "dein",
+    "deine",
+    "sein",
+    "ihre",
+    "ihren",
+    "unser",
+    "unsere",
+    "euer",
+    "eure",
+    "man",
+    "wir",
+    "ihr",
+    "sie",
+    "er",
+    "es",
+    "sich",
+    "ihm",
+    "ihn",
+    "uns",
+    "euch",
+    " dich",
+    // Englisch
+    "the",
+    "and",
+    "or",
+    "for",
+    "with",
+    "from",
+    "to",
+    "of",
+    "in",
+    "on",
+    "at",
+    "by",
+    "as",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "should",
+    "could",
+    "can",
+    "may",
+    "might",
+    "must",
+    "shall",
+    "not",
+    "no",
+    "but",
+    "if",
+    "then",
+    "else",
+    "when",
+    "while",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "its",
+    "his",
+    "her",
+    "their",
+    "our",
+    "your",
+    "my",
+    "we",
+    "you",
+    "they",
+    "he",
+    "she",
+    "them",
+    "him",
+    "us",
+    "all",
+    "any",
+    "both",
+    "each",
+    "few",
+    "more",
+    "most",
+    "other",
+    "some",
+    "such",
+    "only",
+    "own",
+    "same",
+    "than",
+    "too",
+    "very",
+    "just",
+    "now",
+    "new",
+    "old",
+    "free",
+    "best",
+    "top",
+    "official",
+    "home",
+    "page",
+    "site",
+    "website",
+    "welcome",
+    "index",
+    "docs",
+    "doc",
+    "wiki",
+    "guide",
+    "how",
+    "what",
+    "why",
+    "who",
+    "which",
+    "where",
+    "get",
+    "got",
+    "get",
+    "make",
+    "made",
+    "use",
+    "using",
+    "used",
+    // URL-Technik
+    "http",
+    "https",
+    "www",
+    "com",
+    "de",
+    "net",
+    "org",
+    "io",
+    "html",
+    "htm",
+    "php",
+    "asp",
+    "index",
+    "ref",
+    "utm",
+    "source",
+    "medium",
+    "campaign",
+    "clid",
+    "fbcl",
+    "gcl",
+    "en",
+    "us",
+    "p",
+    "s",
+    "v",
+    "id"
+  ]);
+  function tokenize(text) {
+    const normalized = text.replace(/[ÄÖÜ]/g, "A").replace(/[äöü]/g, "a").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+    return normalized.split(/[^a-z0-9]+/).map((t) => t.trim()).filter((t) => t.length >= 3 && t.length <= 24 && !STOPWORDS.has(t) && !/^\d+$/.test(t));
+  }
+  function urlParts(url) {
+    try {
+      const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+      return { host: u.hostname.toLowerCase().replace(/^www\./, ""), path: `${u.pathname} ${u.search}`.toLowerCase() };
+    } catch {
+      return { host: "", path: "" };
+    }
+  }
+  var norm = (s) => s.toLowerCase().trim();
+  function includesTerm(haystack, term) {
+    const t = norm(term);
+    if (!t) return false;
+    return haystack.includes(t);
+  }
+  function analyzeBookmark(url, title, existingTags, glossary) {
+    const { host, path } = urlParts(url);
+    const haystack = `${title} ${host} ${path}`.toLowerCase();
+    const tags = [];
+    const categories = [];
+    const seen = new Set(existingTags.map(norm));
+    const push = (tag) => {
+      const t = norm(tag).replace(/\s+/g, "-");
+      if (t && !seen.has(t) && !tags.includes(t)) {
+        seen.add(t);
+        tags.push(t);
+      }
+    };
+    for (const entry of glossary) {
+      if (!entry.term) continue;
+      if (includesTerm(haystack, entry.term)) {
+        push(entry.term);
+        for (const rel of entry.related) push(rel);
+        if (!categories.includes(entry.term)) categories.push(entry.term);
+      } else {
+        for (const rel of entry.related) {
+          if (includesTerm(haystack, rel)) {
+            push(entry.term);
+            push(rel);
+            if (!categories.includes(entry.term)) categories.push(entry.term);
+            break;
+          }
+        }
+      }
+    }
+    const titleTokens = tokenize(title);
+    for (const t of titleTokens.slice(0, 3)) push(t);
+    const hostCore = host.split(".")[0];
+    if (hostCore && hostCore.length >= 4 && hostCore !== "localhost") push(hostCore);
+    const unique = tags.filter((t) => !tags.some((other) => other !== t && other.length > t.length && other.includes(t)));
+    return { tags: unique.slice(0, 8), categories };
   }
 
   // src/applyBookmark.ts
@@ -124,19 +438,27 @@
     }
     return { state: s, ids };
   }
-  function addBookmarkToState(state, input) {
+  function addBookmarkToState(state, input, opts = {}) {
     const url = input.url.startsWith("http") ? input.url : `https://${input.url}`;
     const dup = state.bookmarks.find((b) => b.url.toLowerCase().replace(/\/$/, "") === url.toLowerCase().replace(/\/$/, ""));
     if (dup) return null;
     const auto = categorize(url, input.title, input.folderPath ?? [], state.rules);
-    const { state: s1, ids: autoIds } = mapNamesToIds(auto.categories, state);
+    let extraCategories = [];
+    let extraTags = [];
+    if (opts.enrich) {
+      const analysis = analyzeBookmark(url, input.title, input.tags, state.glossary);
+      extraTags = analysis.tags;
+      extraCategories = analysis.categories;
+    }
+    const wantedCats = [...auto.categories, ...extraCategories.filter((c) => !auto.categories.includes(c))];
+    const { state: s1, ids: autoIds } = mapNamesToIds(wantedCats, state);
     const categoryIds = [.../* @__PURE__ */ new Set([...input.categoryIds, ...autoIds])];
     const bookmark = {
       id: input.id ?? uid("bm"),
       title: input.title.trim() || url,
       url,
       added: input.added ?? Date.now(),
-      tags: input.tags,
+      tags: [.../* @__PURE__ */ new Set([...input.tags, ...extraTags])],
       categoryIds,
       pinned: input.pinned,
       note: input.note
@@ -147,21 +469,50 @@
   // src/storage.ts
   var STORAGE_KEY = "bdm-state-v1";
   var chromeApi = globalThis.chrome;
-  function sanitize(raw) {
+  var DEFAULT_SETTINGS = {
+    favorites: [],
+    startMinimized: false,
+    aiProvider: "local",
+    aiEndpoint: "",
+    aiModel: ""
+  };
+  function migrateState(raw) {
     if (!raw || typeof raw !== "object") return null;
     const parsed = raw;
-    if (parsed.version !== 1 || !Array.isArray(parsed.bookmarks) || !Array.isArray(parsed.categories)) return null;
-    return { ...parsed, rules: Array.isArray(parsed.rules) ? parsed.rules : [] };
+    if (!Array.isArray(parsed.bookmarks) || !Array.isArray(parsed.categories)) return null;
+    return {
+      version: 2,
+      // Tag-Bereinigung (idempotent): normalisieren, deduplizieren, Teil-Tag-Varianten
+      // entfernen („open"/„lyric" neben „openai"/„lyric-videos") — korrigiert auch
+      // Bestände, die mit einer älteren Engine-Version erzeugt wurden.
+      bookmarks: parsed.bookmarks.map(cleanBookmarkTags),
+      categories: parsed.categories,
+      rules: Array.isArray(parsed.rules) ? parsed.rules : [],
+      glossary: Array.isArray(parsed.glossary) ? parsed.glossary : [],
+      dynamicGroups: Array.isArray(parsed.dynamicGroups) ? parsed.dynamicGroups : [],
+      settings: { ...DEFAULT_SETTINGS, ...parsed.settings ?? {} }
+    };
+  }
+  function cleanBookmarkTags(bm) {
+    if (!Array.isArray(bm.tags) || bm.tags.length === 0) return bm;
+    const seen = /* @__PURE__ */ new Set();
+    const normalized = [];
+    for (const raw of bm.tags) {
+      const t = String(raw).toLowerCase().trim().replace(/\s+/g, "-");
+      if (t && !seen.has(t)) {
+        seen.add(t);
+        normalized.push(t);
+      }
+    }
+    const cleaned = normalized.filter((t) => !(t.length >= 4 && normalized.some((o) => o !== t && o.length > t.length && o.includes(t))));
+    return cleaned.length === bm.tags.length && cleaned.every((t, i) => t === bm.tags[i]) ? bm : { ...bm, tags: cleaned };
   }
   function readLocal() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = sanitize(JSON.parse(raw));
+        const parsed = migrateState(JSON.parse(raw));
         if (parsed) return parsed;
-      }
-      if (chromeApi?.storage?.local) {
-        return createSeedState();
       }
       return createSeedState();
     } catch {
@@ -172,7 +523,7 @@
     if (chromeApi?.storage?.local) {
       try {
         const bag = await chromeApi.storage.local.get(STORAGE_KEY);
-        const parsed = sanitize(bag[STORAGE_KEY]);
+        const parsed = migrateState(bag[STORAGE_KEY]);
         if (parsed) {
           try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));

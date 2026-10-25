@@ -1,12 +1,20 @@
 import type { Bookmark } from '../types';
 import type { BookmarksApi } from '../hooks/useBookmarks';
+import type { CrossLinkTarget } from '../crosslink';
+import Icon from './Icon';
 
 interface Props {
   bookmarks: Bookmark[];
+  /** Über das Glossar verknüpfte Links (nur bei Kategorie-/Gruppen-Auswahl). */
+  crossLinked?: { bookmark: Bookmark; via: CrossLinkTarget[] }[];
+  crossContextName?: string;
   total: number;
   api: BookmarksApi;
   onEdit: (id: string) => void;
   onDemo: () => void;
+  onSelectTag: (tag: string) => void;
+  onSelectCategory: (categoryId: string) => void;
+  compact?: boolean;
 }
 
 function formatDate(ms: number): string {
@@ -21,14 +29,28 @@ function hostOf(url: string): string {
   }
 }
 
-/** Deterministische Farbe aus dem Hostnamen (keine externen Favicon-Anfragen — Privatsphäre). */
-function hueOf(host: string): number {
+/** Kuratierte, gedeckte Avatar-Farben (keine externen Favicon-Anfragen — Privatsphäre).
+    Deterministisch aus dem Hostnamen gewählt — ruhiger als reine HSL-Rotation. */
+const AVATAR_COLORS = ['#5c7fb8', '#6f9a8b', '#8d7ab3', '#a3855e', '#7b95bd', '#96856d', '#5fa0a5', '#8b8ea3'];
+
+function colorOf(host: string): string {
   let h = 0;
-  for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) % 360;
-  return h;
+  for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
-export default function BookmarkList({ bookmarks, total, api, onEdit, onDemo }: Props) {
+export default function BookmarkList({
+  bookmarks,
+  crossLinked = [],
+  crossContextName,
+  total,
+  api,
+  onEdit,
+  onDemo,
+  onSelectTag,
+  onSelectCategory,
+  compact = false,
+}: Props) {
   const catById = new Map(api.state.categories.map((c) => [c.id, c]));
 
   if (total === 0) {
@@ -37,17 +59,17 @@ export default function BookmarkList({ bookmarks, total, api, onEdit, onDemo }: 
         <h2>Noch keine Lesezeichen</h2>
         <p>
           Importiere deine bestehenden Lesezeichen aus Chrome, Firefox oder Brave (Menü → Lesezeichen → Lesezeichen
-          exportieren / als HTML speichern) über <strong>⬆ Import</strong>.
+          exportieren / als HTML speichern) über <strong>Import</strong>.
         </p>
         <p>Oder lade zuerst generische Beispieldaten:</p>
         <button className="btn primary" onClick={onDemo}>
-          🧪 Beispieldaten laden
+          Beispieldaten laden
         </button>
       </section>
     );
   }
 
-  if (bookmarks.length === 0) {
+  if (bookmarks.length === 0 && crossLinked.length === 0) {
     return (
       <section className="empty">
         <h2>Keine Treffer</h2>
@@ -58,55 +80,144 @@ export default function BookmarkList({ bookmarks, total, api, onEdit, onDemo }: 
 
   return (
     <section className="bm-list" aria-label="Lesezeichenliste">
-      <div className="list-meta">
-        {bookmarks.length} von {total} Lesezeichen · sortiert: Angepinnt zuerst, dann jüngstes zuerst
-      </div>
+      {!compact && (
+        <div className="list-meta">
+          {bookmarks.length} von {total} Lesezeichen · Angepinnt zuerst, dann jüngstes zuerst
+          {crossLinked.length > 0 && <> · {crossLinked.length} verknüpft</>}
+        </div>
+      )}
       <ul>
-        {bookmarks.map((bm) => {
-          const host = hostOf(bm.url);
-          return (
-            <li key={bm.id} className={`bm-card ${bm.pinned ? 'pinned' : ''}`}>
-              <span className="bm-avatar" style={{ background: `hsl(${hueOf(host)} 65% 45%)` }} aria-hidden="true">
-                {(bm.title[0] ?? host[0] ?? '?').toUpperCase()}
-              </span>
-              <div className="bm-body">
-                <a className="bm-title" href={bm.url} target="_blank" rel="noreferrer noopener">
-                  {bm.pinned && '📌 '}
-                  {bm.title}
-                </a>
-                <div className="bm-sub">
-                  <span className="bm-host">{host}</span> · {formatDate(bm.added)}
-                  {bm.tags.length > 0 && <span className="bm-tags"> {bm.tags.map((t) => `#${t}`).join(' ')}</span>}
-                </div>
-                <div className="bm-cats">
-                  {bm.categoryIds.map((id) => (
-                    <button key={id} className="chip" onClick={() => undefined} title="Kategorie">
-                      {catById.get(id)?.name ?? '?'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="bm-actions">
-                <button className="btn icon" title={bm.pinned ? 'Loslösen' : 'Anpinnen'} onClick={() => api.togglePin(bm.id)}>
-                  {bm.pinned ? '📍' : '📌'}
-                </button>
-                <button className="btn icon" title="Bearbeiten" onClick={() => onEdit(bm.id)}>
-                  ✏️
-                </button>
-                <button
-                  className="btn icon"
-                  title="Löschen"
-                  onClick={() => {
-                    if (confirm(`„${bm.title}" wirklich löschen?`)) api.removeBookmark(bm.id);
-                  }}
-                >
-                  🗑️
-                </button>
-              </div>
-            </li>
-          );
-        })}
+        {bookmarks.map((bm, i) => (
+          <BmRow
+            key={bm.id}
+            bm={bm}
+            index={i}
+            catById={catById}
+            api={api}
+            onEdit={onEdit}
+            onSelectTag={onSelectTag}
+            onSelectCategory={onSelectCategory}
+            compact={compact}
+          />
+        ))}
       </ul>
+      {crossLinked.length > 0 && (
+        <>
+          <h3 className="cross-head">
+            <Icon name="link" size={14} /> Verknüpft über Glossar{crossContextName ? ` — passt zu „${crossContextName}"` : ''}
+          </h3>
+          <ul>
+            {crossLinked.map(({ bookmark: bm, via }, i) => (
+              <BmRow
+                key={`x-${bm.id}`}
+                bm={bm}
+                index={i}
+                catById={catById}
+                api={api}
+                onEdit={onEdit}
+                onSelectTag={onSelectTag}
+                onSelectCategory={onSelectCategory}
+                compact={compact}
+                viaTerms={[...new Set(via.flatMap((v) => v.via))]}
+              />
+            ))}
+          </ul>
+        </>
+      )}
     </section>
+  );
+}
+
+function BmRow({
+  bm,
+  index,
+  catById,
+  api,
+  onEdit,
+  onSelectTag,
+  onSelectCategory,
+  compact,
+  viaTerms,
+}: {
+  bm: Bookmark;
+  index: number;
+  catById: Map<string, { id: string; name: string }>;
+  api: BookmarksApi;
+  onEdit: (id: string) => void;
+  onSelectTag: (tag: string) => void;
+  onSelectCategory: (categoryId: string) => void;
+  compact: boolean;
+  viaTerms?: string[];
+}) {
+  const host = hostOf(bm.url);
+  const isLinked = Boolean(viaTerms);
+  return (
+    <li
+      className={`bm-card ${bm.pinned ? 'pinned' : ''} ${isLinked ? 'is-cross' : ''} ${compact ? 'compact' : ''}`}
+      style={{ '--i': Math.min(index, 14) } as React.CSSProperties}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/bdm-bookmark', bm.id);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
+      title="Ziehen, um den Link einer Kategorie zuzuordnen"
+    >
+      {!compact && (
+        <span className="bm-avatar" style={{ background: colorOf(host) }} aria-hidden="true">
+          {(bm.title[0] ?? host[0] ?? '?').toUpperCase()}
+        </span>
+      )}
+      <div className="bm-body">
+        <a className="bm-title" href={bm.url} target="_blank" rel="noreferrer noopener">
+          {bm.title}
+        </a>
+        <div className="bm-sub">
+          <span className="bm-host">{host}</span> · <span className="bm-date">{formatDate(bm.added)}</span>
+          {bm.tags.length > 0 && (
+            <span className="bm-tags">
+              {' '}
+              {bm.tags.slice(0, compact ? 3 : 8).map((t) => (
+                <button key={t} className="tag-btn" onClick={() => onSelectTag(t)} title={`Nach #${t} filtern`}>
+                  #{t}
+                </button>
+              ))}
+            </span>
+          )}
+        </div>
+        {!compact && bm.categoryIds.length > 0 && (
+          <div className="bm-cats">
+            {bm.categoryIds.map((id) => (
+              <button key={id} className="chip" onClick={() => onSelectCategory(id)} title="Kategorie öffnen">
+                {catById.get(id)?.name ?? '?'}
+              </button>
+            ))}
+          </div>
+        )}
+        {viaTerms && viaTerms.length > 0 && (
+          <div className="bm-crossline">
+            <Icon name="link" size={12} /> via {viaTerms.join(' · ')}
+          </div>
+        )}
+      </div>
+      <div className="bm-actions">
+        <button className="btn icon" title={bm.pinned ? 'Loslösen' : 'Anpinnen'} onClick={() => api.togglePin(bm.id)}>
+          <Icon name="pin" size={15} className={bm.pinned ? 'pin-on' : ''} />
+        </button>
+        {!compact && (
+          <button className="btn icon" title="Bearbeiten" onClick={() => onEdit(bm.id)}>
+            <Icon name="edit" size={15} />
+          </button>
+        )}
+        <button
+          className="btn icon"
+          title="Löschen"
+          onClick={() => {
+            if (confirm(`„${bm.title}" wirklich löschen?`)) api.removeBookmark(bm.id);
+          }}
+        >
+          <Icon name="trash" size={15} />
+        </button>
+      </div>
+    </li>
   );
 }

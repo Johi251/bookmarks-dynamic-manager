@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { CURATED_LINKS } from '../curated';
 import type { BookmarksApi } from '../hooks/useBookmarks';
+import Icon from './Icon';
 
 /**
  * Kuratierte Empfehlungen großer Link-Datenbanken, die die eigenen Kategorien
@@ -18,7 +19,9 @@ export default function CuratedPanel({ api }: { api: BookmarksApi }) {
 
   return (
     <section className="curated">
-      <h2>🔗 Empfohlene Link-Datenbanken</h2>
+      <h2>
+        <Icon name="sparkles" size={17} /> Empfohlene Link-Datenbanken
+      </h2>
       <p className="hint">
         Kuratierte Sammlungen, die deine Kategorien gezielt ergänzen. Ein Klick übernimmt den Link samt automatischer
         Kategorisierung in deine Sammlung.
@@ -38,7 +41,7 @@ export default function CuratedPanel({ api }: { api: BookmarksApi }) {
               <div className="curated-foot">
                 <span className="bm-host">{l.url}</span>
                 <button className="btn small" disabled={isIn} onClick={() => take(l.url, l.title)}>
-                  {isIn ? '✓ bereits vorhanden' : '+ Übernehmen'}
+                  {isIn ? 'Vorhanden' : '+ Übernehmen'}
                 </button>
               </div>
             </li>

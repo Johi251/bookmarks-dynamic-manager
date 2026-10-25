@@ -1,11 +1,13 @@
 import type { AppState, Bookmark, Category } from './types';
 import { categorize } from './categorizer';
 import { uid } from './rules';
+import { analyzeBookmark } from './ai/engine';
 
 /**
  * Gemeinsame Kern-Logik „Lesezeichen in Zustand einfügen" — genutzt von der App
  * (Web/Desktop) und vom Add-on-Background. Auto-Kategorisierung und manuelle
- * Auswahl werden zusammengeführt (Multi-Kategorie).
+ * Auswahl werden zusammengeführt (Multi-Kategorie); optional reichert die
+ * lokale KI-Engine Meta-Tags und Glossar-Kategorien an.
  */
 
 /** Legt eine Kategorie nach Namen an, falls sie fehlt (case-insensitive). */
@@ -41,14 +43,32 @@ export interface NewBookmarkInput {
   id?: string;
 }
 
+export interface AddOptions {
+  /** KI-Anreicherung: Meta-Tags + Glossar-Kategorien lokal berechnen und mergen. */
+  enrich?: boolean;
+}
+
 /** Fügt ein Lesezeichen hinzu; bereits vorhandene URL → null (Duplikat). */
-export function addBookmarkToState(state: AppState, input: NewBookmarkInput): { state: AppState; bookmark: Bookmark } | null {
+export function addBookmarkToState(
+  state: AppState,
+  input: NewBookmarkInput,
+  opts: AddOptions = {}
+): { state: AppState; bookmark: Bookmark } | null {
   const url = input.url.startsWith('http') ? input.url : `https://${input.url}`;
   const dup = state.bookmarks.find((b) => b.url.toLowerCase().replace(/\/$/, '') === url.toLowerCase().replace(/\/$/, ''));
   if (dup) return null;
 
   const auto = categorize(url, input.title, input.folderPath ?? [], state.rules);
-  const { state: s1, ids: autoIds } = mapNamesToIds(auto.categories, state);
+  let extraCategories: string[] = [];
+  let extraTags: string[] = [];
+  if (opts.enrich) {
+    const analysis = analyzeBookmark(url, input.title, input.tags, state.glossary);
+    extraTags = analysis.tags;
+    extraCategories = analysis.categories;
+  }
+
+  const wantedCats = [...auto.categories, ...extraCategories.filter((c) => !auto.categories.includes(c))];
+  const { state: s1, ids: autoIds } = mapNamesToIds(wantedCats, state);
   const categoryIds = [...new Set([...input.categoryIds, ...autoIds])];
 
   const bookmark: Bookmark = {
@@ -56,7 +76,7 @@ export function addBookmarkToState(state: AppState, input: NewBookmarkInput): { 
     title: input.title.trim() || url,
     url,
     added: input.added ?? Date.now(),
-    tags: input.tags,
+    tags: [...new Set([...input.tags, ...extraTags])],
     categoryIds,
     pinned: input.pinned,
     note: input.note,

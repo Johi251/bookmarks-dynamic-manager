@@ -1,11 +1,12 @@
 {
   "name": "bookmarks-dynamic-manager",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test": "tsc --noEmit && bun scripts/test-logic.ts",
     "preview": "vite preview",
     "build:ext": "tsc --noEmit && vite build -c vite.config.ext.ts && esbuild extension/background.ts --bundle --format=iife --outfile=dist-ext/background.js --log-level=error && node scripts/package-extension.mjs",
     "build:app": "tsc --noEmit && vite build",

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CategorizeRule } from '../types';
 import type { BookmarksApi } from '../hooks/useBookmarks';
 import { uid } from '../rules';
+import Icon from './Icon';
 
 /**
  * Regel-Editor: zeigt die automatische Kategorisierung transparent und editierbar.
@@ -31,7 +32,9 @@ export default function RulesDialog({ api, onClose }: { api: BookmarksApi; onClo
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal wide" role="dialog" aria-label="Kategorisierungs-Regeln">
-        <h2>⚙ Kategorisierungs-Regeln</h2>
+        <h2>
+          <Icon name="settings" size={17} /> Kategorisierungs-Regeln
+        </h2>
         <p className="hint">
           <strong>Domain</strong>-Regeln matchen den Hostnamen, <strong>Schlüsselwort</strong>-Regeln Host + Pfad +
           Titel. Ein Link darf in mehrere Kategorien gleichzeitig fallen (Mehrfachzuordnung). Passt keine Regel, wird
@@ -93,7 +96,7 @@ export default function RulesDialog({ api, onClose }: { api: BookmarksApi; onClo
               }
             }}
           >
-            ↻ Speichern &amp; alles neu kategorisieren
+            <Icon name="refresh" size={14} /> Speichern &amp; alles neu kategorisieren
           </button>
           <button
             className="btn primary"

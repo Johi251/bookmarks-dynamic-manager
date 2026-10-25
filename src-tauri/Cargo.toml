@@ -1,6 +1,6 @@
 [package]
 name = "bookmarks-dynamic-manager"
-version = "1.0.0"
+version = "1.2.0"
 description = "Lokale Lesezeichen-Verwaltung mit automatischer Multi-Kategorisierung"
 edition = "2021"
 rust-version = "1.77.2"

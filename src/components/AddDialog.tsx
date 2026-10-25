@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Bookmark } from '../types';
 import type { BookmarksApi } from '../hooks/useBookmarks';
+import Icon from './Icon';
 
 interface Props {
   api: BookmarksApi;
@@ -8,7 +9,7 @@ interface Props {
   onClose: () => void;
 }
 
-/** Dialog zum Hinzufügen und Bearbeiten; zeigt die Live-Auto-Kategorisierung an. */
+/** Dialog zum Hinzufügen und Bearbeiten; zeigt Live-Auto-Kategorisierung + KI-Tag-Vorschläge. */
 export default function AddDialog({ api, bookmark, onClose }: Props) {
   const [title, setTitle] = useState(bookmark?.title ?? '');
   const [url, setUrl] = useState(bookmark?.url ?? '');
@@ -17,11 +18,17 @@ export default function AddDialog({ api, bookmark, onClose }: Props) {
   const [pinned, setPinned] = useState(bookmark?.pinned ?? false);
   const [selected, setSelected] = useState<string[]>(bookmark?.categoryIds ?? []);
   const [newCat, setNewCat] = useState('');
+  const [takeTags, setTakeTags] = useState<string[]>([]);
 
   const suggestion = useMemo(() => {
     if (!url.trim()) return [];
     return api.suggestCategories(url.trim(), title.trim());
   }, [url, title, api]);
+
+  const tagSuggestion = useMemo(() => {
+    if (!url.trim()) return [];
+    return api.suggestTags(url.trim(), title.trim()).filter((t) => !tags.toLowerCase().includes(t));
+  }, [url, title, tags, api]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -37,19 +44,22 @@ export default function AddDialog({ api, bookmark, onClose }: Props) {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) return;
-    const tagList = tags
-      .split(',')
-      .map((t) => t.trim().toLowerCase())
-      .filter(Boolean);
+    const tagList = [
+      ...tags
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean),
+      ...takeTags,
+    ];
     const catIds = [...selected];
     if (newCat.trim()) {
       const cat = api.addCategory(newCat.trim());
       if (!catIds.includes(cat.id)) catIds.push(cat.id);
     }
     if (bookmark) {
-      api.updateBookmark(bookmark.id, { title: title.trim() || url, url, tags: tagList, pinned, note: note.trim() || undefined, categoryIds: catIds });
+      api.updateBookmark(bookmark.id, { title: title.trim() || url, url, tags: [...new Set(tagList)], pinned, note: note.trim() || undefined, categoryIds: catIds });
     } else {
-      api.addBookmark({ title: title.trim() || url, url: url.trim(), tags: tagList, categoryIds: catIds, pinned, note: note.trim() || undefined });
+      api.addBookmark({ title: title.trim() || url, url: url.trim(), tags: [...new Set(tagList)], categoryIds: catIds, pinned, note: note.trim() || undefined });
     }
     onClose();
   };
@@ -76,8 +86,23 @@ export default function AddDialog({ api, bookmark, onClose }: Props) {
         </label>
         {suggestion.length > 0 && (
           <p className="suggest">
-            🤖 Auto-Kategorisierung: <strong>{suggestion.join(' · ')}</strong> — wird beim Speichern ergänzt.
+            <Icon name="sparkles" size={14} /> Auto-Kategorisierung: <strong>{suggestion.join(' · ')}</strong> — wird beim Speichern ergänzt.
           </p>
+        )}
+        {tagSuggestion.length > 0 && (
+          <div className="suggest tag-suggest">
+            <Icon name="tag" size={14} /> Vorgeschlagene Meta-Tags:
+            {tagSuggestion.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`tag-chip ${takeTags.includes(t) ? 'active' : ''}`}
+                onClick={() => setTakeTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]))}
+              >
+                #{t}
+              </button>
+            ))}
+          </div>
         )}
         <label>
           Tags (Komma-getrennt)
