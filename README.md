@@ -14,8 +14,8 @@ kompatibel; Automatische Kategorisierung identisch):
 | Form | Download | Installation |
 |---|---|---|
 | **Web-App (PWA)** | <https://johi251.github.io/bookmarks-dynamic-manager/> | Direkt öffnen; im Browser „Installieren“ wählen → wirkt wie eine App, offlinefähig |
-| **Windows-App** | Release-Bereich dieses Repos: `BookmarksDynamicManager_…-setup.exe` (Installer) bzw. `BookmarksDynamicManager.exe` | Installer ausführen oder EXE direkt starten (nutzt WebView2, auf Windows 10/11 vorinstalliert) |
-| **Browser-Add-on** | Release-Bereich: `bookmarks-dynamic-manager-chrome.zip` (Chrome/Brave/Edge) und `…-firefox.zip` | Entpacken → `chrome://extensions` → Entwicklermodus → „Entpackte Erweiterung laden“; Firefox: `about:debugging` → „Add-on temporär laden“ |
+| **Windows-App** | <https://github.com/Johi251/bookmarks-dynamic-manager/releases/tag/v1.1.0>: `BookmarksDynamicManager.exe` (portabel) oder `Bookmarks.Dynamic.Manager_1.0.0_x64-setup.exe` (Installer) | EXE direkt starten bzw. Installer ausführen (nutzt WebView2, auf Windows 10/11 vorinstalliert) |
+| **Browser-Add-on** | Release-Bereich: `bookmarks-dynamic-manager-chrome.zip` (Chrome/Brave/Edge) und `bookmarks-dynamic-manager-firefox.zip` | Entpacken → `chrome://extensions` → Entwicklermodus → „Entpackte Erweiterung laden“; Firefox: `about:debugging` → „Add-on temporär laden“ |
 
 Add-on-Funktionen: Popup-Button „★ Diese Seite speichern“, Rechtsklick-Kontextmenü
 und Tastenkürzel **Strg+Shift+S** — jeder gespeicherte Link wird sofort automatisch
