@@ -6,6 +6,22 @@ bleiben im eigenen Browser (localStorage) — kein Account, kein Server, keine K
 
 **Live:** <https://johi251.github.io/bookmarks-dynamic-manager/>
 
+## Downloads & Installation
+
+Die App gibt es in drei Formen — alle nutzen denselben Datenbestand (JSON-Import/Export
+kompatibel; Automatische Kategorisierung identisch):
+
+| Form | Download | Installation |
+|---|---|---|
+| **Web-App (PWA)** | <https://johi251.github.io/bookmarks-dynamic-manager/> | Direkt öffnen; im Browser „Installieren“ wählen → wirkt wie eine App, offlinefähig |
+| **Windows-App** | Release-Bereich dieses Repos: `BookmarksDynamicManager_…-setup.exe` (Installer) bzw. `BookmarksDynamicManager.exe` | Installer ausführen oder EXE direkt starten (nutzt WebView2, auf Windows 10/11 vorinstalliert) |
+| **Browser-Add-on** | Release-Bereich: `bookmarks-dynamic-manager-chrome.zip` (Chrome/Brave/Edge) und `…-firefox.zip` | Entpacken → `chrome://extensions` → Entwicklermodus → „Entpackte Erweiterung laden“; Firefox: `about:debugging` → „Add-on temporär laden“ |
+
+Add-on-Funktionen: Popup-Button „★ Diese Seite speichern“, Rechtsklick-Kontextmenü
+und Tastenkürzel **Strg+Shift+S** — jeder gespeicherte Link wird sofort automatisch
+(multi-)kategorisiert; die komplette Verwaltung öffnet über „Manager öffnen“.
+
+
 ## Funktionen
 
 - **Import** von Browser-Lesezeichen (Netscape-HTML aus Chrome, Firefox, Edge, Brave)
@@ -56,9 +72,18 @@ npm run preview  # Build lokal ansehen
 ```
 
 Struktur: `src/types.ts` (Datenmodell) · `src/rules.ts` (Standard-Regeln) ·
-`src/categorizer.ts` (Zuordnung) · `src/parser/netscape.ts` (Browser-Import) ·
+`src/categorizer.ts` (Zuordnung) · `src/applyBookmark.ts` (gemeinsame Speicher-Logik
+für App und Add-on) · `src/parser/netscape.ts` (Browser-Import) ·
 `src/exporter.ts` (JSON/HTML/Markdown) · `src/hooks/useBookmarks.ts` (State) ·
-`src/components/*` (UI) · `ANFORDERUNGEN.md` (lokal: konsolidierte Anforderung).
+`src/storage.ts` (localStorage / chrome.storage-Adapter) ·
+`src/components/*` (UI) · `extension/` (Add-on: Manifest, Popup, Background) ·
+`src-tauri/` (Windows-Wrapper) · `ANFORDERUNGEN.md` (lokal: konsolidierte Anforderung).
+
+```bash
+npm run build        # Web-App (dist/)
+npm run build:ext    # Browser-Add-on + ZIPs (dist-ext/, releases/)
+npx tauri build      # Windows-EXE + Installer (src-tauri/target/release/)
+```
 
 ## Grenzen (bewusst)
 

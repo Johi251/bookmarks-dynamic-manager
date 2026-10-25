@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Bookmarks Dynamic Manager",
+  "mainBinaryName": "BookmarksDynamicManager",
+  "version": "1.0.0",
+  "identifier": "io.github.johi251.bookmarks-dynamic-manager",
+  "build": {
+    "frontendDist": "../dist-desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Bookmarks Dynamic Manager",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 980,
+        "minHeight": 640,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "windows": {
+      "nsis": {
+        "languages": ["German", "English"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

@@ -6,13 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:ext": "tsc --noEmit && vite build -c vite.config.ext.ts && esbuild extension/background.ts --bundle --format=iife --outfile=dist-ext/background.js --log-level=error && node scripts/package-extension.mjs",
+    "build:app": "tsc --noEmit && vite build",
+    "build:desktop": "vite build --base=./ --outDir dist-desktop"
   },
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",

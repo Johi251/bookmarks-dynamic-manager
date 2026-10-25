@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useReducer } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { AppState, Bookmark, Category, CategorizeRule } from '../types';
 import { categorize } from '../categorizer';
-import { clearState, loadState, saveState } from '../storage';
+import { clearState, loadStateAsync, saveStateSync, subscribeChanges } from '../storage';
 import { createDemoBookmarks } from '../demo';
-import { DEFAULT_RULES, uid } from '../rules';
+import { createSeedState, uid } from '../rules';
+import { addBookmarkToState, mapNamesToIds, type NewBookmarkInput } from '../applyBookmark';
 import type { ParsedImport } from '../parser/netscape';
 
 export interface BookmarksApi {
   state: AppState;
-  addBookmark: (input: { title: string; url: string; tags: string[]; categoryIds: string[]; pinned: boolean; note?: string }) => void;
+  addBookmark: (input: Omit<NewBookmarkInput, 'folderPath' | 'added' | 'id'>) => void;
   updateBookmark: (id: string, patch: Partial<Omit<Bookmark, 'id'>>) => void;
   removeBookmark: (id: string) => void;
   togglePin: (id: string) => void;
-  importNetscape: (parsed: ParsedImport) => { added: number; skipped: number };
+  importNetscape: (parsed: ParsedImport) => void;
   importState: (imported: AppState, mode: 'merge' | 'replace') => void;
   addCategory: (name: string, parentId?: string | null) => Category;
   setRules: (rules: CategorizeRule[]) => void;
@@ -23,11 +24,12 @@ export interface BookmarksApi {
 }
 
 type Action =
-  | { type: 'add'; input: BookmarksApi['addBookmark'] extends (i: infer I) => void ? I : never }
+  | { type: 'hydrate'; state: AppState }
+  | { type: 'add'; input: NewBookmarkInput }
   | { type: 'update'; id: string; patch: Partial<Omit<Bookmark, 'id'>> }
   | { type: 'remove'; id: string }
   | { type: 'pin'; id: string }
-  | { type: 'importNet'; parsed: ParsedImport; addedRef: { value: number } }
+  | { type: 'importNet'; parsed: ParsedImport }
   | { type: 'importState'; imported: AppState; mode: 'merge' | 'replace' }
   | { type: 'addCategory'; name: string; parentId?: string | null }
   | { type: 'setRules'; rules: CategorizeRule[] }
@@ -35,46 +37,13 @@ type Action =
   | { type: 'demo' }
   | { type: 'reset' };
 
-/** Legt eine Kategorie nach Namen an, falls sie (auf beliebiger Ebene) fehlt. */
-function ensureCategory(state: AppState, name: string, parentId: string | null, source: Category['source']): AppState {
-  const exists = state.categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
-  if (exists) return state;
-  const cat: Category = { id: uid('cat'), name, parentId, source };
-  return { ...state, categories: [...state.categories, cat] };
-}
-
-/** Ordnet Kategorienamen zu IDs zu (legt fehlende Kategorien an) und dedupliziert. */
-function mapNamesToIds(names: string[], state: AppState): { state: AppState; ids: string[] } {
-  let s = state;
-  const ids: string[] = [];
-  for (const name of names) {
-    s = ensureCategory(s, name, null, 'auto');
-    const cat = s.categories.find((c) => c.name.toLowerCase() === name.toLowerCase())!;
-    if (!ids.includes(cat.id)) ids.push(cat.id);
-  }
-  return { state: s, ids };
-}
-
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case 'hydrate':
+      return action.state;
     case 'add': {
-      const { title, url, tags, categoryIds, pinned, note } = action.input;
-      const folderCats: string[] = [];
-      // Auto-Kategorisierung + manuelle Auswahl zusammenführen.
-      const auto = categorize(url, title, folderCats, state.rules);
-      const { state: s1, ids: autoIds } = mapNamesToIds(auto.categories, state);
-      const merged = [...new Set([...categoryIds, ...autoIds])];
-      const bm: Bookmark = {
-        id: uid('bm'),
-        title: title.trim() || url,
-        url: url.startsWith('http') ? url : `https://${url}`,
-        added: Date.now(),
-        tags,
-        categoryIds: merged,
-        pinned,
-        note,
-      };
-      return { ...s1, bookmarks: [bm, ...s1.bookmarks] };
+      const res = addBookmarkToState(state, action.input);
+      return res ? res.state : state;
     }
     case 'update': {
       return {
@@ -99,7 +68,6 @@ function reducer(state: AppState, action: Action): AppState {
         existingUrls.add(key);
         return true;
       });
-      action.addedRef.value = fresh.length;
 
       // Auto-Kategorisierung auf alle importierten Links anwenden (Multi-Kategorie!).
       const withCats: Bookmark[] = fresh.map((b) => {
@@ -175,29 +143,55 @@ function reducer(state: AppState, action: Action): AppState {
       const demo = createDemoBookmarks();
       let s: AppState = { ...state };
       const existingUrls = new Set(s.bookmarks.map((b) => b.url.toLowerCase()));
-      const withCats = demo
-        .filter((b) => !existingUrls.has(b.url.toLowerCase()))
-        .map((b) => {
-          const auto = categorize(b.url, b.title, [], s.rules);
-          const { state: s2, ids } = mapNamesToIds(auto.categories, s);
-          s = s2;
-          return { ...b, categoryIds: ids };
-        });
-      return { ...s, bookmarks: [...withCats, ...s.bookmarks] };
+      for (const b of demo) {
+        if (existingUrls.has(b.url.toLowerCase())) continue;
+        const res = addBookmarkToState(s, { ...b, folderPath: [] });
+        if (res) s = res.state;
+      }
+      return s;
     }
     case 'reset':
-      return { version: 1, bookmarks: [], categories: [], rules: DEFAULT_RULES };
+      return createSeedState();
     default:
       return state;
   }
 }
 
 export function useBookmarks(): BookmarksApi {
-  const [state, dispatch] = useReducer(reducer, undefined, loadState);
+  const [state, dispatch] = useReducer(reducer, undefined, () => createSeedState());
+  const [ready, setReady] = useState(false);
+  const lastSerialized = useRef<string | null>(null);
 
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    let alive = true;
+    void loadStateAsync().then((loaded) => {
+      if (!alive) return;
+      const serialized = JSON.stringify(loaded);
+      lastSerialized.current = serialized;
+      dispatch({ type: 'hydrate', state: loaded });
+      setReady(true);
+    });
+    // Externe Änderungen (Add-on-Background, anderer Tab) übernehmen.
+    const unsubscribe = subscribeChanges((next) => {
+      const serialized = JSON.stringify(next);
+      if (serialized !== lastSerialized.current) {
+        lastSerialized.current = serialized;
+        dispatch({ type: 'hydrate', state: next });
+      }
+    });
+    return () => {
+      alive = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    const serialized = JSON.stringify(state);
+    if (serialized === lastSerialized.current) return; // eigene Rückkopplung ignorieren
+    lastSerialized.current = serialized;
+    saveStateSync(state);
+  }, [state, ready]);
 
   return useMemo<BookmarksApi>(
     () => ({
@@ -206,11 +200,7 @@ export function useBookmarks(): BookmarksApi {
       updateBookmark: (id, patch) => dispatch({ type: 'update', id, patch }),
       removeBookmark: (id) => dispatch({ type: 'remove', id }),
       togglePin: (id) => dispatch({ type: 'pin', id }),
-      importNetscape: (parsed) => {
-        const addedRef = { value: 0 };
-        dispatch({ type: 'importNet', parsed, addedRef });
-        return { added: parsed.bookmarks.length, skipped: parsed.skippedDuplicates };
-      },
+      importNetscape: (parsed) => dispatch({ type: 'importNet', parsed }),
       importState: (imported, mode) => dispatch({ type: 'importState', imported, mode }),
       addCategory: (name, parentId) => {
         dispatch({ type: 'addCategory', name, parentId });

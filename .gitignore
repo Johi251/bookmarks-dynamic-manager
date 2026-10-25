@@ -3,3 +3,8 @@ dist/
 *.local
 ANFORDERUNGEN.md
 .data/
+src-tauri/target/
+dist-desktop/
+releases/ext-chrome/
+releases/ext-firefox/
+assets-source/
