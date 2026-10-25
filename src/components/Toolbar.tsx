@@ -15,6 +15,7 @@ interface Props {
   onImport: () => void;
   onRules: () => void;
   onGlossary: () => void;
+  onVideo: () => void;
   onSettings: () => void;
 }
 
@@ -33,6 +34,7 @@ export default function Toolbar({
   onImport,
   onRules,
   onGlossary,
+  onVideo,
   onSettings,
 }: Props) {
   return (
@@ -71,7 +73,11 @@ export default function Toolbar({
       <button className="btn" onClick={onRules} title="Kategorisierungs-Regeln anzeigen und bearbeiten">
         <Icon name="settings" size={14} /> Regeln
       </button>
-      <button className="btn" onClick={onSettings} title="Einstellungen (Start, Favoriten, KI, Tastenkürzel)">
+      <button className="btn icon" onClick={onVideo} title="Video-Studio: Lesezeichen als 16:9-Walkthrough oder 9:16-Short präsentieren (Remotion)">
+        <Icon name="film" size={15} />
+        <span className="visually-hidden">Video-Studio</span>
+      </button>
+      <button className="btn" onClick={onSettings} title="Einstellungen (Start, Favoriten, KI, Backup, Tastenkürzel)">
         <Icon name="layers" size={14} />
         <span className="visually-hidden">Einstellungen</span>
       </button>

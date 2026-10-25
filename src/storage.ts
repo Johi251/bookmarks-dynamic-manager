@@ -1,5 +1,6 @@
 import type { AppSettings, AppState, Bookmark } from './types';
 import { createSeedState } from './rules';
+import { classifyClicker } from './oneclicker';
 
 const STORAGE_KEY = 'bdm-state-v1';
 /** Der API-Schlüssel liegt bewusst AUSSERHALB des App-Zustands, damit er
@@ -37,25 +38,44 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiProvider: 'local',
   aiEndpoint: '',
   aiModel: '',
+  clickerEnabled: true,
+  faviconsEnabled: true,
+  visionOnSave: false,
+  visionModel: 'glm-5.3-flash',
+  autoBackup: true,
 };
 
-/** Führt alte Zustände (v1) und unvollständige v2-Zustände auf das volle v2-Modell. */
+/**
+ * Führt alte Zustände (v1/v2) und unvollständige v3-Zustände auf das volle
+ * v3-Modell. v2 → v3: statische 1Clicker-Klassifikation für alle Software-/
+ * Repository-Links (Repository-Links starten auf „checking" und werden im
+ * Hintergrund verfeinert); neue Einstellungen erhalten ihre Defaults.
+ */
 export function migrateState(raw: unknown): AppState | null {
   if (!raw || typeof raw !== 'object') return null;
   const parsed = raw as Partial<AppState> & { version?: number };
   if (!Array.isArray(parsed.bookmarks) || !Array.isArray(parsed.categories)) return null;
+  const oldVersion = parsed.version ?? 1;
   return {
-    version: 2,
+    version: 3,
     // Tag-Bereinigung (idempotent): normalisieren, deduplizieren, Teil-Tag-Varianten
     // entfernen („open"/„lyric" neben „openai"/„lyric-videos") — korrigiert auch
     // Bestände, die mit einer älteren Engine-Version erzeugt wurden.
-    bookmarks: parsed.bookmarks.map(cleanBookmarkTags),
+    // Bei v2 → v3 zusätzlich: statische 1Clicker-Nutzungsweg-Klassifikation.
+    bookmarks: parsed.bookmarks.map((b) => upgradeClicker(cleanBookmarkTags(b), oldVersion)),
     categories: parsed.categories,
     rules: Array.isArray(parsed.rules) ? parsed.rules : [],
     glossary: Array.isArray(parsed.glossary) ? parsed.glossary : [],
     dynamicGroups: Array.isArray(parsed.dynamicGroups) ? parsed.dynamicGroups : [],
     settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
   };
+}
+
+/** v2 → v3: hängt fehlende 1Clicker-Infos an (idempotent — bestehende bleiben). */
+function upgradeClicker(bm: Bookmark, oldVersion: number): Bookmark {
+  if (oldVersion >= 3 && bm.clicker !== undefined) return bm;
+  const info = classifyClicker(bm.url, bm.title, bm.tags);
+  return info ? { ...bm, clicker: info } : bm;
 }
 
 function cleanBookmarkTags(bm: Bookmark): Bookmark {

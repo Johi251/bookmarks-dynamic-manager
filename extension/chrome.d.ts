@@ -16,6 +16,8 @@ declare namespace chrome {
   namespace tabs {
     function query(q: { active?: boolean; currentWindow?: boolean }): Promise<Tab[]>;
     function create(opts: { url: string }): Promise<Tab>;
+    /** Screenshot der sichtbaren Seite (activeTab) — Basis der Vision-Analyse. */
+    function captureVisibleTab(windowId: number | null, options?: { format?: 'jpeg' | 'png'; quality?: number }): Promise<string>;
     interface Tab {
       id?: number;
       url?: string;

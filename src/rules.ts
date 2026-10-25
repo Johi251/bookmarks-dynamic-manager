@@ -80,7 +80,7 @@ export function createSeedState(): AppState {
     };
   });
   return {
-    version: 2,
+    version: 3,
     bookmarks: [],
     categories,
     rules: DEFAULT_RULES,
@@ -92,6 +92,11 @@ export function createSeedState(): AppState {
       aiProvider: 'local',
       aiEndpoint: '',
       aiModel: '',
+      clickerEnabled: true,
+      faviconsEnabled: true,
+      visionOnSave: false,
+      visionModel: 'glm-5.3-flash',
+      autoBackup: true,
     },
   };
 }

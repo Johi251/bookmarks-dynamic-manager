@@ -106,7 +106,7 @@
       };
     });
     return {
-      version: 2,
+      version: 3,
       bookmarks: [],
       categories,
       rules: DEFAULT_RULES,
@@ -117,7 +117,12 @@
         startMinimized: false,
         aiProvider: "local",
         aiEndpoint: "",
-        aiModel: ""
+        aiModel: "",
+        clickerEnabled: true,
+        faviconsEnabled: true,
+        visionOnSave: false,
+        visionModel: "glm-5.3-flash",
+        autoBackup: true
       }
     };
   }
@@ -422,6 +427,76 @@
     return { tags: unique.slice(0, 8), categories };
   }
 
+  // src/oneclicker.ts
+  var CLICKER_RECHECK_MS = 14 * 864e5;
+  var REPO_HOSTS = /* @__PURE__ */ new Set(["github.com", "gitlab.com", "codeberg.org", "sourceforge.net"]);
+  var HOSTED_WEB_SUFFIXES = [
+    "vercel.app",
+    "netlify.app",
+    "github.io",
+    "pages.dev",
+    "render.com",
+    "railway.app",
+    "huggingface.space",
+    "streamlit.app",
+    "replit.app",
+    "fly.dev",
+    "herokuapp.com",
+    "web.app",
+    "firebaseapp.com",
+    "cloudflareworkers.com",
+    "deno.dev",
+    "glitch.me"
+  ];
+  var LOCAL_SIGNALS = [
+    { pattern: /start-1clicker\.cmd/i, kind: "cmd", reason: "START-1CLICKER.cmd vorhanden" },
+    { pattern: /\bdocker[- ]?(compose|file|image)?\b|\/docker\b/i, kind: "docker", reason: "Docker-Unterst\xFCtzung erkannt" },
+    { pattern: /portable|standalone[- ]exe|\.exe\b|x64[- ]zip|win(?:dows)?[- ](?:portable|zip)/i, kind: "portable", reason: "Portable Windows-Assets erkannt" }
+  ];
+  function parseRepo(url) {
+    try {
+      const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+      if (!REPO_HOSTS.has(u.hostname.toLowerCase().replace(/^www\./, ""))) return null;
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts.length < 2) return null;
+      const name = parts[1].replace(/\.git$/, "");
+      if (!/^[A-Za-z0-9_.-]+$/.test(parts[0]) || !/^[A-Za-z0-9_.-]+$/.test(name)) return null;
+      return { owner: parts[0], name, cloneUrl: `https://${u.hostname}/${parts[0]}/${name}.git`, host: u.hostname.toLowerCase() };
+    } catch {
+      return null;
+    }
+  }
+  function classifyClicker(url, title, tags = []) {
+    let host = "";
+    try {
+      host = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.toLowerCase().replace(/^www\./, "");
+    } catch {
+      return void 0;
+    }
+    const haystack = `${title} ${url} ${tags.join(" ")}`;
+    for (const sig of LOCAL_SIGNALS) {
+      if (sig.pattern.test(haystack)) {
+        const repo = parseRepo(url);
+        return {
+          status: "local",
+          kind: sig.kind,
+          reason: sig.reason,
+          repo: repo ? { owner: repo.owner, name: repo.name, cloneUrl: repo.cloneUrl } : void 0
+        };
+      }
+    }
+    if (HOSTED_WEB_SUFFIXES.some((s) => host === s || host.endsWith(`.${s}`))) {
+      return { status: "online", kind: "web", launchUrl: url, reason: `Gehostete Web-App (${host})` };
+    }
+    if (REPO_HOSTS.has(host)) {
+      const repo = parseRepo(url);
+      if (repo) {
+        return { status: "checking", kind: "repo", repo: { owner: repo.owner, name: repo.name, cloneUrl: repo.cloneUrl } };
+      }
+    }
+    return void 0;
+  }
+
   // src/applyBookmark.ts
   function ensureCategory(state, name, source = "auto") {
     const exists = state.categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
@@ -453,6 +528,7 @@
     const wantedCats = [...auto.categories, ...extraCategories.filter((c) => !auto.categories.includes(c))];
     const { state: s1, ids: autoIds } = mapNamesToIds(wantedCats, state);
     const categoryIds = [.../* @__PURE__ */ new Set([...input.categoryIds, ...autoIds])];
+    const clicker = classifyClicker(url, input.title, input.tags);
     const bookmark = {
       id: input.id ?? uid("bm"),
       title: input.title.trim() || url,
@@ -461,37 +537,51 @@
       tags: [.../* @__PURE__ */ new Set([...input.tags, ...extraTags])],
       categoryIds,
       pinned: input.pinned,
-      note: input.note
+      note: input.note,
+      clicker
     };
     return { state: { ...s1, bookmarks: [bookmark, ...s1.bookmarks] }, bookmark };
   }
 
   // src/storage.ts
   var STORAGE_KEY = "bdm-state-v1";
+  var AI_KEY_STORAGE = "bdm-ai-key";
   var chromeApi = globalThis.chrome;
   var DEFAULT_SETTINGS = {
     favorites: [],
     startMinimized: false,
     aiProvider: "local",
     aiEndpoint: "",
-    aiModel: ""
+    aiModel: "",
+    clickerEnabled: true,
+    faviconsEnabled: true,
+    visionOnSave: false,
+    visionModel: "glm-5.3-flash",
+    autoBackup: true
   };
   function migrateState(raw) {
     if (!raw || typeof raw !== "object") return null;
     const parsed = raw;
     if (!Array.isArray(parsed.bookmarks) || !Array.isArray(parsed.categories)) return null;
+    const oldVersion = parsed.version ?? 1;
     return {
-      version: 2,
+      version: 3,
       // Tag-Bereinigung (idempotent): normalisieren, deduplizieren, Teil-Tag-Varianten
       // entfernen („open"/„lyric" neben „openai"/„lyric-videos") — korrigiert auch
       // Bestände, die mit einer älteren Engine-Version erzeugt wurden.
-      bookmarks: parsed.bookmarks.map(cleanBookmarkTags),
+      // Bei v2 → v3 zusätzlich: statische 1Clicker-Nutzungsweg-Klassifikation.
+      bookmarks: parsed.bookmarks.map((b) => upgradeClicker(cleanBookmarkTags(b), oldVersion)),
       categories: parsed.categories,
       rules: Array.isArray(parsed.rules) ? parsed.rules : [],
       glossary: Array.isArray(parsed.glossary) ? parsed.glossary : [],
       dynamicGroups: Array.isArray(parsed.dynamicGroups) ? parsed.dynamicGroups : [],
       settings: { ...DEFAULT_SETTINGS, ...parsed.settings ?? {} }
     };
+  }
+  function upgradeClicker(bm, oldVersion) {
+    if (oldVersion >= 3 && bm.clicker !== void 0) return bm;
+    const info = classifyClicker(bm.url, bm.title, bm.tags);
+    return info ? { ...bm, clicker: info } : bm;
   }
   function cleanBookmarkTags(bm) {
     if (!Array.isArray(bm.tags) || bm.tags.length === 0) return bm;
@@ -553,9 +643,95 @@
     }
     return true;
   }
+  function getAiApiKey() {
+    try {
+      return localStorage.getItem(AI_KEY_STORAGE) ?? "";
+    } catch {
+      return "";
+    }
+  }
+
+  // src/ai/vision.ts
+  function toStringArray(value) {
+    return Array.isArray(value) ? value.filter((v) => typeof v === "string") : [];
+  }
+  async function analyzeScreenshot(imageDataUrl, bookmark, settings, glossary, signal) {
+    const local = () => ({
+      ...analyzeBookmark(bookmark.url, bookmark.title, bookmark.existingTags, glossary),
+      used: "local"
+    });
+    const endpoint = settings.aiEndpoint.trim().replace(/\/+$/, "");
+    const model = (settings.visionModel || "glm-5.3-flash").trim();
+    const key = getAiApiKey();
+    if (settings.aiProvider !== "api" || !endpoint || !key || !imageDataUrl.startsWith("data:image/")) {
+      return local();
+    }
+    const glossaryContext = glossary.length ? glossary.map((g) => `${g.term} = ${g.definition} [verwandt: ${g.related.join(", ")}]`).join("\n") : "(noch leer)";
+    const payload = {
+      model,
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: 'Du analysierst Screenshots von Webseiten f\xFCr eine Lesezeichen-Verwaltung. Beschreibe kurz das, was auf dem Screenshot ZU SEHEN ist (Art der Anwendung, Oberfl\xE4che, erkennbare Themen), und leite daraus Schlagw\xF6rter und passende Kategorien ab. Nutze das Glossar des Nutzers, wenn ein Begriff passt. Antworte ausschlie\xDFlich als JSON: {"tags":["..."],"categories":["..."],"visual":"<ein Satz>"} (tags: max. 5, kleingeschrieben).'
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Glossar:
+${glossaryContext}
+
+Lesezeichen: ${bookmark.title}
+${bookmark.url}
+
+Analysiere den Screenshot.`
+            },
+            { type: "image_url", image_url: { url: imageDataUrl } }
+          ]
+        }
+      ]
+    };
+    const controller = new AbortController();
+    signal?.addEventListener("abort", () => controller.abort(), { once: true });
+    const timer = setTimeout(() => controller.abort(), 45e3);
+    try {
+      const res = await fetch(`${endpoint}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      if (!res.ok) throw new Error(`Vision-API antwortete mit HTTP ${res.status}`);
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content ?? "";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+      const tags = toStringArray(parsed.tags).map((t) => t.toLowerCase().replace(/\s+/g, "-")).slice(0, 5);
+      const categories = toStringArray(parsed.categories).slice(0, 4);
+      const visual = typeof parsed.visual === "string" ? parsed.visual : void 0;
+      const fallback = analyzeBookmark(bookmark.url, bookmark.title, [...bookmark.existingTags, ...tags], glossary);
+      return {
+        tags: [.../* @__PURE__ */ new Set([...tags, ...fallback.tags])].slice(0, 8),
+        categories: [.../* @__PURE__ */ new Set([...categories, ...fallback.categories])],
+        used: "vision",
+        visualSummary: visual
+      };
+    } catch (err) {
+      return {
+        ...local(),
+        fallbackReason: String(err instanceof Error ? err.message : err)
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   // extension/background.ts
   var MENU_ID = "bdm-save-page";
+  var SHOTS_KEY = "bdm-shots-v1";
+  var SHOTS_MAX = 12;
   chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
       chrome.contextMenus.create({
@@ -565,6 +741,45 @@
       });
     });
   });
+  async function downscaleShot(dataUrl) {
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const scale = Math.min(1, 640 / bitmap.width);
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = new OffscreenCanvas(w, h);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return dataUrl;
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      bitmap.close();
+      const out = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.55 });
+      return await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result));
+        fr.onerror = () => reject(fr.error);
+        fr.readAsDataURL(out);
+      });
+    } catch {
+      return dataUrl;
+    }
+  }
+  async function storeShot(bookmarkId, dataUrl) {
+    try {
+      const bag = await chrome.storage.local.get(SHOTS_KEY);
+      const shots = bag[SHOTS_KEY] ?? {};
+      shots[bookmarkId] = dataUrl;
+      const ids = Object.keys(shots);
+      if (ids.length > SHOTS_MAX) {
+        const state = await loadStateAsync();
+        const order = new Map(state.bookmarks.map((b, i) => [b.id, i]));
+        ids.sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity));
+        for (const id of ids.slice(0, ids.length - SHOTS_MAX)) delete shots[id];
+      }
+      await chrome.storage.local.set({ [SHOTS_KEY]: shots });
+    } catch {
+    }
+  }
   async function saveCurrentTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url ?? "";
@@ -573,9 +788,46 @@
     const state = await loadStateAsync();
     const result = addBookmarkToState(state, { title, url, tags: [], categoryIds: [], pinned: false });
     if (!result) return { ok: false, reason: "duplicate" };
-    saveStateSync(result.state);
-    const names = result.bookmark.categoryIds.map((id) => result.state.categories.find((c) => c.id === id)?.name ?? "").filter(Boolean);
-    return { ok: true, categories: names };
+    let nextState = result.state;
+    let bookmark = result.bookmark;
+    const clicker = classifyClicker(url, title, []);
+    if (clicker) {
+      const info = clicker;
+      bookmark = { ...bookmark, clicker: info };
+      nextState = { ...nextState, bookmarks: nextState.bookmarks.map((b) => b.id === bookmark.id ? bookmark : b) };
+    }
+    let vision = "off";
+    let visionTags;
+    if (state.settings.visionOnSave && state.settings.aiProvider === "api" && state.settings.aiEndpoint) {
+      try {
+        const raw = await chrome.tabs.captureVisibleTab(null, { format: "jpeg", quality: 70 });
+        if (raw) {
+          const shot = await downscaleShot(raw);
+          await storeShot(bookmark.id, shot);
+          const res = await analyzeScreenshot(
+            shot,
+            { url, title, existingTags: bookmark.tags },
+            state.settings,
+            state.glossary
+          );
+          vision = res.used;
+          if (res.tags.length > 0) {
+            visionTags = res.tags;
+            const merged = [.../* @__PURE__ */ new Set([...bookmark.tags, ...res.tags])];
+            const { state: s2, ids } = mapNamesToIds(res.categories, nextState);
+            bookmark = { ...bookmark, tags: merged, categoryIds: [.../* @__PURE__ */ new Set([...bookmark.categoryIds, ...ids])] };
+            nextState = {
+              ...s2,
+              bookmarks: s2.bookmarks.map((b) => b.id === bookmark.id ? bookmark : b)
+            };
+          }
+        }
+      } catch {
+      }
+    }
+    saveStateSync(nextState);
+    const names = bookmark.categoryIds.map((id) => nextState.categories.find((c) => c.id === id)?.name ?? "").filter(Boolean);
+    return { ok: true, categories: names, visionTags, vision };
   }
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId !== MENU_ID || !tab?.id) return;

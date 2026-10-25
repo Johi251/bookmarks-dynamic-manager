@@ -1,6 +1,6 @@
 /* Minimaler, robuster Service Worker: App-Shell precachen,
    Navigation network-first (damit Updates ankommen), Assets cache-first. */
-const CACHE = 'bdm-v1.2.0';
+const CACHE = 'bdm-v1.3.0';
 const CORE = ['./', './index.html', './manifest.webmanifest', './favicon.svg'];
 
 self.addEventListener('install', (event) => {

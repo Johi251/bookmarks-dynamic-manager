@@ -2,6 +2,8 @@ import type { Bookmark } from '../types';
 import type { BookmarksApi } from '../hooks/useBookmarks';
 import type { CrossLinkTarget } from '../crosslink';
 import Icon from './Icon';
+import Favicon from './Favicon';
+import ClickerBadge from './ClickerBadge';
 
 interface Props {
   bookmarks: Bookmark[];
@@ -14,6 +16,8 @@ interface Props {
   onDemo: () => void;
   onSelectTag: (tag: string) => void;
   onSelectCategory: (categoryId: string) => void;
+  /** 1Clicker: 🔵 Badge-Klick → Dialog für lokale Bereitstellung. */
+  onDeploy: (bookmarkId: string) => void;
   compact?: boolean;
 }
 
@@ -29,16 +33,6 @@ function hostOf(url: string): string {
   }
 }
 
-/** Kuratierte, gedeckte Avatar-Farben (keine externen Favicon-Anfragen — Privatsphäre).
-    Deterministisch aus dem Hostnamen gewählt — ruhiger als reine HSL-Rotation. */
-const AVATAR_COLORS = ['#5c7fb8', '#6f9a8b', '#8d7ab3', '#a3855e', '#7b95bd', '#96856d', '#5fa0a5', '#8b8ea3'];
-
-function colorOf(host: string): string {
-  let h = 0;
-  for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
-}
-
 export default function BookmarkList({
   bookmarks,
   crossLinked = [],
@@ -49,6 +43,7 @@ export default function BookmarkList({
   onDemo,
   onSelectTag,
   onSelectCategory,
+  onDeploy,
   compact = false,
 }: Props) {
   const catById = new Map(api.state.categories.map((c) => [c.id, c]));
@@ -97,6 +92,7 @@ export default function BookmarkList({
             onEdit={onEdit}
             onSelectTag={onSelectTag}
             onSelectCategory={onSelectCategory}
+            onDeploy={onDeploy}
             compact={compact}
           />
         ))}
@@ -117,6 +113,7 @@ export default function BookmarkList({
                 onEdit={onEdit}
                 onSelectTag={onSelectTag}
                 onSelectCategory={onSelectCategory}
+                onDeploy={onDeploy}
                 compact={compact}
                 viaTerms={[...new Set(via.flatMap((v) => v.via))]}
               />
@@ -136,6 +133,7 @@ function BmRow({
   onEdit,
   onSelectTag,
   onSelectCategory,
+  onDeploy,
   compact,
   viaTerms,
 }: {
@@ -146,6 +144,7 @@ function BmRow({
   onEdit: (id: string) => void;
   onSelectTag: (tag: string) => void;
   onSelectCategory: (categoryId: string) => void;
+  onDeploy: (bookmarkId: string) => void;
   compact: boolean;
   viaTerms?: string[];
 }) {
@@ -163,14 +162,23 @@ function BmRow({
       title="Ziehen, um den Link einer Kategorie zuzuordnen"
     >
       {!compact && (
-        <span className="bm-avatar" style={{ background: colorOf(host) }} aria-hidden="true">
-          {(bm.title[0] ?? host[0] ?? '?').toUpperCase()}
-        </span>
+        <Favicon url={bm.url} title={bm.title} enabled={api.state.settings.faviconsEnabled} />
       )}
       <div className="bm-body">
-        <a className="bm-title" href={bm.url} target="_blank" rel="noreferrer noopener">
-          {bm.title}
-        </a>
+        <div className="bm-title-row">
+          <a className="bm-title" href={bm.url} target="_blank" rel="noreferrer noopener">
+            {bm.title}
+          </a>
+          {bm.clicker && (
+            <ClickerBadge
+              bookmarkId={bm.id}
+              clicker={bm.clicker}
+              onOnline={(u) => window.open(u, '_blank', 'noopener')}
+              onLocal={onDeploy}
+              compact={compact}
+            />
+          )}
+        </div>
         <div className="bm-sub">
           <span className="bm-host">{host}</span> · <span className="bm-date">{formatDate(bm.added)}</span>
           {bm.tags.length > 0 && (

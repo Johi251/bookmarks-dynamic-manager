@@ -307,7 +307,7 @@ function computeCounts(state: AppState): { perCat: Map<string, number>; smart: R
   const weekStart = Date.now() - 7 * 86_400_000;
   const catById = new Map(state.categories.map((c) => [c.id, c]));
   const perCat = new Map<string, number>();
-  const smart: Record<SmartViewKey, number> = { today: 0, week: 0, github: 0, ki: 0, pinned: 0, uncategorized: 0 };
+  const smart: Record<SmartViewKey, number> = { today: 0, week: 0, github: 0, ki: 0, pinned: 0, uncategorized: 0, 'clicker-online': 0, 'clicker-local': 0 };
 
   const childrenOf = new Map<string, string[]>();
   for (const c of state.categories) {
@@ -325,6 +325,8 @@ function computeCounts(state: AppState): { perCat: Map<string, number>; smart: R
     if (bm.categoryIds.some((id) => (catById.get(id)?.name ?? '').toLowerCase().startsWith('ki'))) smart.ki++;
     if (bm.pinned) smart.pinned++;
     if (bm.categoryIds.length === 0) smart.uncategorized++;
+    if (bm.clicker?.status === 'online') smart['clicker-online']++;
+    if (bm.clicker?.status === 'local') smart['clicker-local']++;
   }
   return { perCat, smart, total: state.bookmarks.length };
 }

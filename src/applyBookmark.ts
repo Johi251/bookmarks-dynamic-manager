@@ -2,6 +2,7 @@ import type { AppState, Bookmark, Category } from './types';
 import { categorize } from './categorizer';
 import { uid } from './rules';
 import { analyzeBookmark } from './ai/engine';
+import { classifyClicker } from './oneclicker';
 
 /**
  * Gemeinsame Kern-Logik „Lesezeichen in Zustand einfügen" — genutzt von der App
@@ -71,6 +72,9 @@ export function addBookmarkToState(
   const { state: s1, ids: autoIds } = mapNamesToIds(wantedCats, state);
   const categoryIds = [...new Set([...input.categoryIds, ...autoIds])];
 
+  // 1Clicker: Nutzungsweg-Klassifikation direkt beim Anlegen (Repository → 🟠 Checking …).
+  const clicker = classifyClicker(url, input.title, input.tags);
+
   const bookmark: Bookmark = {
     id: input.id ?? uid('bm'),
     title: input.title.trim() || url,
@@ -80,6 +84,7 @@ export function addBookmarkToState(
     categoryIds,
     pinned: input.pinned,
     note: input.note,
+    clicker,
   };
   return { state: { ...s1, bookmarks: [bookmark, ...s1.bookmarks] }, bookmark };
 }

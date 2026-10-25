@@ -1,6 +1,6 @@
 /** Datenmodell des Bookmarks Dynamic Manager. */
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 export interface Bookmark {
   id: string;
@@ -12,6 +12,35 @@ export interface Bookmark {
   categoryIds: string[];
   pinned: boolean;
   note?: string;
+  /** 1Clicker-Status-Engine: Nutzungsweg-Analyse für Software-/Repository-Links. */
+  clicker?: ClickerInfo;
+}
+
+// ── 1Clicker-Protokoll (Nutzungswege wie im 1Clicker-Werkzeugkasten) ────────
+
+/**
+ * Nutzungsweg eines Software-/Repository-Links:
+ * - `checking`   — 🟠 Analyse läuft (statische Klassifikation + Hintergrund-Check)
+ * - `online`     — 🟢 mit 1 Klick kostenlos im Browser nutzbar (Live-Anwendung)
+ * - `local`      — 🔵 mit 1 Klick kostenlos lokal nutzbar (Docker/portable/START-1CLICKER)
+ * - `none`       — analysiert, aber kein 1-Klick-Weg erkannt (keine Badge)
+ */
+export type ClickerStatus = 'checking' | 'online' | 'local' | 'none';
+
+/** Art des erkannten Nutzungswegs. */
+export type ClickerKind = 'repo' | 'web' | 'docker' | 'portable' | 'cmd';
+
+export interface ClickerInfo {
+  status: ClickerStatus;
+  kind: ClickerKind;
+  /** Zeitpunkt der letzten (versuchten) Analyse — epoch ms. */
+  checkedAt?: number;
+  /** 🟢 Klick-Ziel: Live-Anwendung (Homepage, GitHub-Pages-Demo, gehostete Instanz). */
+  launchUrl?: string;
+  /** 🔵 Repo-Koordinaten für die lokale Bereitstellung (Clone/Docker/Releases). */
+  repo?: { owner: string; name: string; cloneUrl: string };
+  /** Menschenlesbarer Grund des erkannten Nutzungswegs (Tooltip/Badge-Dialog). */
+  reason?: string;
 }
 
 export type CategorySource = 'import' | 'auto' | 'manual' | 'rule' | 'seed';
@@ -69,10 +98,20 @@ export interface AppSettings {
   aiProvider: 'local' | 'api';
   aiEndpoint: string;
   aiModel: string;
+  /** 1Clicker-Status-Engine: Repositories im Hintergrund analysieren (Netzwerk zu GitHub). */
+  clickerEnabled: boolean;
+  /** Echte Webseiten-Logos (Favicon-Kette Google S2 → Icon.horse) laden; aus = Buchstaben-Avatare. */
+  faviconsEnabled: boolean;
+  /** Add-on: beim Speichern optional Screenshot ziehen und per Vision-Modell verschlagworten. */
+  visionOnSave: boolean;
+  /** Vision-Modell (OpenAI-kompatibel, z. B. „glm-5.3-flash"). */
+  visionModel: string;
+  /** Wöchentliche lokale Auto-Sicherung (IndexedDB-Snapshots). */
+  autoBackup: boolean;
 }
 
 export interface AppState {
-  version: 2;
+  version: 3;
   bookmarks: Bookmark[];
   categories: Category[];
   rules: CategorizeRule[];
@@ -89,7 +128,15 @@ export type Selection =
   | { type: 'tag'; tag: string }
   | { type: 'group'; groupId: string };
 
-export type SmartViewKey = 'today' | 'week' | 'github' | 'ki' | 'pinned' | 'uncategorized';
+export type SmartViewKey =
+  | 'today'
+  | 'week'
+  | 'github'
+  | 'ki'
+  | 'pinned'
+  | 'uncategorized'
+  | 'clicker-online'
+  | 'clicker-local';
 
 export const SMART_VIEWS: { key: SmartViewKey; label: string; icon: string }[] = [
   { key: 'today', label: 'Neu heute', icon: 'sparkles' },
@@ -97,5 +144,7 @@ export const SMART_VIEWS: { key: SmartViewKey; label: string; icon: string }[] =
   { key: 'github', label: 'GitHub', icon: 'github' },
   { key: 'ki', label: 'KI-Tools', icon: 'bot' },
   { key: 'pinned', label: 'Angepinnt', icon: 'pin' },
+  { key: 'clicker-online', label: '1Clicker · Online', icon: 'zap' },
+  { key: 'clicker-local', label: '1Clicker · Lokal', icon: 'monitor' },
   { key: 'uncategorized', label: 'Ohne Kategorie', icon: 'help' },
 ];

@@ -42,8 +42,8 @@ export default function ImportDialog({ api, onClose, onLearnGlossary, notify }: 
       const text = await file.text();
       if (/\.json$/i.test(file.name) || file.type.includes('json')) {
         const parsed = JSON.parse(text) as Omit<Partial<AppState>, 'version'> & { version?: number; bookmarks?: unknown };
-        if ((parsed.version !== 1 && parsed.version !== 2) || !Array.isArray(parsed.bookmarks)) {
-          setResult('Ungültiges JSON — keine App-Datensicherung (Version 1 oder 2 erwartet).');
+        if ((parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) || !Array.isArray(parsed.bookmarks)) {
+          setResult('Ungültiges JSON — keine App-Datensicherung (Version 1, 2 oder 3 erwartet).');
         } else {
           const replace = confirm(
             `${parsed.bookmarks.length} Lesezeichen gefunden.\n\nOK = Bestand ERSETZEN\nAbbrechen = zusammenführen`

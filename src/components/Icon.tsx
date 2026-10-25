@@ -7,7 +7,8 @@ export type IconName =
   | 'pin' | 'edit' | 'trash' | 'link' | 'tag' | 'book' | 'sparkles' | 'layers'
   | 'minimize' | 'maximize' | 'x' | 'check' | 'chevronRight' | 'chevronDown'
   | 'star' | 'command' | 'hash' | 'external' | 'folder' | 'refresh' | 'alert'
-  | 'clock' | 'github' | 'bot' | 'help' | 'target' | 'arrowRight' | 'minus';
+  | 'clock' | 'github' | 'bot' | 'help' | 'target' | 'arrowRight' | 'minus'
+  | 'zap' | 'monitor' | 'camera' | 'film' | 'download' | 'shield' | 'terminal';
 
 const PATHS: Record<IconName, string> = {
   bookmark: 'M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z',
@@ -45,6 +46,13 @@ const PATHS: Record<IconName, string> = {
   target: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 4h.01',
   arrowRight: 'M5 12h14m0 0-6-6m6 6-6 6',
   minus: 'M12 5v14M5 5l14 14M19 5 5 19',
+  zap: 'M13 2 4.5 13.5H11l-1 8.5L19.5 10.5H13l0-8.5Z',
+  monitor: 'M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1ZM9 20h6M12 16v4',
+  camera: 'M4 8a1 1 0 0 1 1-1h2.5l1.5-2h6l1.5 2H19a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Zm8 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
+  film: 'M3 5h18v14H3V5Zm0 4h18M3 15h18M7 5v14M17 5v14',
+  download: 'M12 4v11m0 0 4-4m-4 4-4-4M5 19h14',
+  shield: 'M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Zm-2.5 9 2 2 4-4.5',
+  terminal: 'M5 6h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm3 4 2.5 2.5L8 15m5 0h4',
 };
 
 interface Props {

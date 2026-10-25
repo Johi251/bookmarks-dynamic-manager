@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { AppSettings, AppState, Bookmark, Category, CategorizeRule, GlossaryEntry } from '../types';
 import { categorize } from '../categorizer';
-import { clearState, loadStateAsync, saveStateSync, subscribeChanges } from '../storage';
+import { clearState, loadStateAsync, migrateState, saveStateSync, subscribeChanges } from '../storage';
 import { createDemoBookmarks } from '../demo';
 import { createSeedState, uid } from '../rules';
 import { addBookmarkToState, mapNamesToIds, type NewBookmarkInput } from '../applyBookmark';
 import { analyzeBookmark, type SmartAnalysis } from '../ai/engine';
 import { matchGlossary } from '../glossary';
+import { classifyClicker } from '../oneclicker';
 import type { ParsedImport } from '../parser/netscape';
 
 export interface ImportEnrichment {
@@ -27,6 +28,7 @@ export interface BookmarksApi {
   togglePin: (id: string) => void;
   importNetscape: (parsed: ParsedImport, enrich?: ImportEnrichment) => void;
   importState: (imported: AppState, mode: 'merge' | 'replace') => void;
+  importCsvBookmarks: (bookmarks: Bookmark[], categoryNames: string[]) => void;
   addCategory: (name: string, parentId?: string | null) => Category;
   setRules: (rules: CategorizeRule[]) => void;
   recategorizeAll: () => void;
@@ -59,6 +61,7 @@ type Action =
   | { type: 'pin'; id: string }
   | { type: 'importNet'; parsed: ParsedImport; enrich?: ImportEnrichment }
   | { type: 'importState'; imported: AppState; mode: 'merge' | 'replace' }
+  | { type: 'importCsv'; bookmarks: Bookmark[]; categoryNames: string[] }
   | { type: 'addCategory'; name: string; parentId?: string | null }
   | { type: 'setRules'; rules: CategorizeRule[] }
   | { type: 'recategorize' }
@@ -144,16 +147,16 @@ function reducer(state: AppState, action: Action): AppState {
         }
         const { state: s2, ids } = mapNamesToIds(names, s);
         s = s2;
-        return { ...b, tags, categoryIds: [...new Set([...importCatIds, ...ids])] };
+        // 1Clicker-Nutzungsweg beim Import gleich miterkennen (Repository → 🟠 Checking …).
+        return { ...b, tags, categoryIds: [...new Set([...importCatIds, ...ids])], clicker: classifyClicker(b.url, b.title, tags) };
       });
       return { ...s, bookmarks: [...withCats, ...state.bookmarks] };
     }
     case 'importState': {
       const { imported, mode } = action;
-      // Alte Exporte (v1) auf v2 heben — Glossar/Gruppen fehlen dann (leer).
-      const normalized: AppState = imported.version === 2
-        ? imported
-        : { ...imported, version: 2, glossary: [], dynamicGroups: [], settings: state.settings };
+      // Alte Exporte (v1/v2) via Migration auf v3 heben — inkl. statischer
+      // 1Clicker-Klassifikation und neuer Settings-Defaults.
+      const normalized = migrateState(imported) ?? state;
       if (mode === 'replace') return normalized;
       // Merge: Kategorien nach Name deduplizieren, Links nach URL.
       let s: AppState = { ...state };
@@ -190,6 +193,24 @@ function reducer(state: AppState, action: Action): AppState {
         if (!dynamicGroups.some((x) => x.name.toLowerCase() === g.name.toLowerCase())) dynamicGroups.push(g);
       }
       return { ...s, bookmarks: [...fresh, ...s.bookmarks], rules, glossary, dynamicGroups };
+    }
+    case 'importCsv': {
+      const { bookmarks, categoryNames } = action;
+      let s: AppState = { ...state };
+      const { state: s2, ids: catIds } = mapNamesToIds(categoryNames, s);
+      s = s2;
+      const existingUrls = new Set(s.bookmarks.map((b) => b.url.toLowerCase().replace(/\/$/, '')));
+      const fresh = bookmarks.filter((b) => {
+        const key = b.url.toLowerCase().replace(/\/$/, '');
+        if (existingUrls.has(key)) return false;
+        existingUrls.add(key);
+        return true;
+      });
+      const withCats = fresh.map((b) => ({
+        ...b,
+        categoryIds: [...new Set([...b.categoryIds, ...catIds])],
+      }));
+      return { ...s, bookmarks: [...withCats, ...s.bookmarks] };
     }
     case 'addCategory': {
       const parent = action.parentId ?? null;
@@ -359,6 +380,7 @@ export function useBookmarks(): BookmarksApi {
       togglePin: (id) => dispatch({ type: 'pin', id }),
       importNetscape: (parsed, enrich) => dispatch({ type: 'importNet', parsed, enrich }),
       importState: (imported, mode) => dispatch({ type: 'importState', imported, mode }),
+      importCsvBookmarks: (bookmarks, categoryNames) => dispatch({ type: 'importCsv', bookmarks, categoryNames }),
       addCategory: (name, parentId) => {
         dispatch({ type: 'addCategory', name, parentId });
         return state.categories.find((c) => c.name === name) ?? { id: uid('cat'), name, parentId: parentId ?? null, source: 'manual' };

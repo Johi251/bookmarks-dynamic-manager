@@ -1,7 +1,7 @@
 {
   "name": "bookmarks-dynamic-manager",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,18 +10,26 @@
     "preview": "vite preview",
     "build:ext": "tsc --noEmit && vite build -c vite.config.ext.ts && esbuild extension/background.ts --bundle --format=iife --outfile=dist-ext/background.js --log-level=error && node scripts/package-extension.mjs",
     "build:app": "tsc --noEmit && vite build",
-    "build:desktop": "vite build --base=./ --outDir dist-desktop"
+    "build:desktop": "vite build --base=./ --outDir dist-desktop",
+    "studio": "remotion studio video/remotion.config.ts",
+    "render:video": "node scripts/render-video.mjs"
   },
   "dependencies": {
+    "@remotion/player": "^4.0.430",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "remotion": "^4.0.430"
   },
   "devDependencies": {
+    "@remotion/bundler": "^4.0.430",
+    "@remotion/cli": "^4.0.430",
+    "@remotion/renderer": "^4.0.430",
     "@tauri-apps/cli": "^2.12.4",
     "@types/node": "^26.6.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
+    "esbuild": "^0.27.0",
     "linkedom": "^0.18.14",
     "typescript": "~5.9.0",
     "vite": "^7.3.0"

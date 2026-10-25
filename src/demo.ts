@@ -25,6 +25,12 @@ const raw: [string, string, string, number][] = [
   ['JayTX — Lyric Videos & Musik-Vertrieb', 'https://jaytx.example.com/', 'musik smma', 3],
   ['ROFLnator.90 — MEME SMMA Auto-Posting', 'https://roflnator90.example.com/', 'memes smma', 4],
   ['Drive-Ordner — Assets & Vorlagen', 'https://drive.example.com/assets', 'assets', 6],
+  // 1Clicker-Demo (Nutzungswege): gehostete Web-App, Docker-Repo, portable Release, Repository:
+  ['Excalidraw — Whiteboard', 'https://excalidraw.com/', 'whiteboard zeichnen', 1],
+  ['Itty-Bitty — gehostete Mini-Apps', 'https://itty.bitty.example.app/', 'tools', 2],
+  ['DockGE — Docker Compose Manager', 'https://github.com/example/dockge-compose-ui', 'docker container', 3],
+  ['Uptime-Kuma — Monitoring portable', 'https://github.com/example/uptime-kuma-monitor', 'monitoring portable exe', 5],
+  ['Awesome-Selfhosted Übersicht', 'https://github.com/example/awesome-selfhosted-list', 'selfhosted link-datenbanken', 8],
 ];
 
 export function createDemoBookmarks(): Bookmark[] {

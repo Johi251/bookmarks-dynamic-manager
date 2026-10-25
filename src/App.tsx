@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, useEffect, useMemo, useRef, useState } from 'react';
 import type { Selection } from './types';
 import { useBookmarks } from './hooks/useBookmarks';
 import { crossLinksForBookmark } from './crosslink';
 import { bookmarkMatchesGroup } from './groups';
+import { CLICKER_QUEUE_DELAY_MS, CLICKER_SESSION_LIMIT, needsCheck, refineRepo } from './oneclicker';
+import { ensureWeeklyBackup } from './backup';
 import Toolbar from './components/Toolbar';
 import Sidebar from './components/Sidebar';
 import BookmarkList from './components/BookmarkList';
@@ -14,6 +16,8 @@ import GlossaryDialog from './components/GlossaryDialog';
 import GlossaryLearnDialog from './components/GlossaryLearnDialog';
 import SettingsDialog from './components/SettingsDialog';
 import CommandPalette from './components/CommandPalette';
+import ClickerDialog from './components/ClickerDialog';
+const VideoStudio = lazy(() => import('./components/VideoStudio'));
 import Icon from './components/Icon';
 import { ToastHost, useToasts } from './components/Toasts';
 import type { TermCandidate } from './ai/engine';
@@ -34,6 +38,8 @@ export default function App() {
   const [learnCandidates, setLearnCandidates] = useState<TermCandidate[] | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
+  const [showVideo, setShowVideo] = useState(false);
+  const [deployId, setDeployId] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [quickOpen, setQuickOpen] = useState<string | null>(null); // gewählte Favoriten-Kategorie im Kompaktmodus
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
@@ -46,6 +52,51 @@ export default function App() {
     if (api.ready) setMinimized(api.state.settings.startMinimized);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api.ready]);
+
+  // Wöchentliche lokale Auto-Sicherung prüfen (IndexedDB-Snapshots).
+  useEffect(() => {
+    if (!api.ready) return;
+    void ensureWeeklyBackup(api.state).then((snap) => {
+      if (snap) console.info(`Auto-Backup angelegt: ${snap.date} (${snap.bookmarkCount} Lesezeichen)`);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api.ready]);
+
+  // 1Clicker-Hintergrund-Queue: Repositories gedrosselt über die GitHub-API
+  // verfeinern (Session-Limit beachten); Ergebnisse landen auf dem Lesezeichen.
+  const refinedIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!api.ready || !api.state.settings.clickerEnabled) return;
+    const queue = api.state.bookmarks.filter(
+      (b) => b.clicker?.repo && needsCheck(b) && !refinedIds.current.has(b.id)
+    );
+    if (queue.length === 0) return;
+    let cancelled = false;
+    let done = 0;
+    const run = async () => {
+      for (const bm of queue) {
+        if (cancelled || done >= CLICKER_SESSION_LIMIT) return;
+        refinedIds.current.add(bm.id);
+        done++;
+        await new Promise((r) => setTimeout(r, CLICKER_QUEUE_DELAY_MS));
+        if (cancelled) return;
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 12_000);
+          const refined = await refineRepo(bm.clicker!, controller.signal);
+          clearTimeout(timer);
+          if (!cancelled) api.updateBookmark(bm.id, { clicker: refined });
+        } catch {
+          /* offline/Rate-Limit → Status bleibt „checking", nächster Start probiert erneut */
+        }
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api.ready, api.state.settings.clickerEnabled, api.state.bookmarks.length]);
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -105,6 +156,12 @@ export default function App() {
             break;
           case 'uncategorized':
             if (bm.categoryIds.length > 0) return false;
+            break;
+          case 'clicker-online':
+            if (bm.clicker?.status !== 'online') return false;
+            break;
+          case 'clicker-local':
+            if (bm.clicker?.status !== 'local') return false;
             break;
         }
       } else if (selection.type === 'category') {
@@ -227,6 +284,7 @@ export default function App() {
               onDemo={api.loadDemo}
               onSelectTag={(t) => setSelection({ type: 'tag', tag: t })}
               onSelectCategory={(id) => setQuickOpen(id)}
+              onDeploy={setDeployId}
               compact
             />
           </main>
@@ -271,6 +329,7 @@ export default function App() {
           onImport={() => setShowImport(true)}
           onRules={() => setShowRules(true)}
           onGlossary={() => setShowGlossary(true)}
+          onVideo={() => setShowVideo(true)}
           onSettings={() => setShowSettings(true)}
         />
       </header>
@@ -292,6 +351,7 @@ export default function App() {
               onDemo={api.loadDemo}
               onSelectTag={(t) => setSelection({ type: 'tag', tag: t })}
               onSelectCategory={(id) => setSelection({ type: 'category', categoryId: id })}
+              onDeploy={setDeployId}
             />
           )}
         </main>
@@ -337,6 +397,12 @@ export default function App() {
         />
       )}
       {showPalette && <CommandPalette api={api} onClose={() => setShowPalette(false)} onSelect={setSelection} notify={notify} />}
+      {showVideo && (
+        <VideoStudio api={api} onClose={() => setShowVideo(false)} notify={notify} />
+      )}
+      {deployId && (
+        <ClickerDialog api={api} bookmarkId={deployId} onClose={() => setDeployId(null)} notify={notify} />
+      )}
       <ToastHost toasts={toasts} />
     </div>
   );
