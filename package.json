@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "build:ext": "tsc --noEmit && vite build -c vite.config.ext.ts && esbuild extension/background.ts --bundle --format=iife --outfile=dist-ext/background.js --log-level=error && node scripts/package-extension.mjs",
     "build:app": "tsc --noEmit && vite build",
-    "build:desktop": "tsc --noEmit && vite build --base=./ --outDir dist-desktop",
+    "build:desktop": "tsc --noEmit && vite build --base=./ --outDir dist-desktop && node scripts/desktop-entry.mjs",
     "studio": "remotion studio video/remotion.config.ts",
     "render:video": "node scripts/render-video.mjs",
     "build:portable-web": "tsc --noEmit && vite build --base=./ --outDir dist-web",
