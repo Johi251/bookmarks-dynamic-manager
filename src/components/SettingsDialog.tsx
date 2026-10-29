@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BookmarksApi } from '../hooks/useBookmarks';
-import { getAiApiKey, setAiApiKey } from '../storage';
+import { getAiApiKey, setAiApiKey, isWebUrl, storageKind } from '../storage';
 import { formatShortcut, type ShortcutCombo } from '../shortcut';
 import { deleteSnapshot, exportCsv, importCsv, listSnapshots, writeSnapshot, type BackupSnapshot } from '../backup';
 import { downloadFile, exportJson } from '../exporter';
@@ -24,7 +24,7 @@ export default function SettingsDialog({ api, shortcut, onShortcutChange, onClos
   const csvInput = useRef<HTMLInputElement>(null);
   const jsonInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => setApiKey(getAiApiKey()), []);
+  useEffect(() => { void getAiApiKey().then(setApiKey).catch(() => notify('KI-Schlüssel konnte nicht geladen werden', 'warn')); }, []);
   useEffect(() => {
     void listSnapshots().then(setSnapshots);
   }, []);
@@ -55,10 +55,16 @@ export default function SettingsDialog({ api, shortcut, onShortcutChange, onClos
     setRecording(false);
   };
 
-  const save = () => {
+  const save = async () => {
+    if (settings.aiProvider === 'api') {
+      if (!isWebUrl(settings.aiEndpoint)) { notify('Gültigen HTTP-/HTTPS-KI-Endpunkt ohne Zugangsdaten eingeben', 'warn'); return; }
+      if (storageKind() === 'extension' && !await chrome.permissions.request({ origins: [`${new URL(settings.aiEndpoint).origin}/*`] }).catch(() => false)) {
+        notify('Zugriff auf den KI-Endpunkt wurde nicht erlaubt', 'warn'); return;
+      }
+    }
+    try { await setAiApiKey(apiKey); } catch { notify('KI-Schlüssel nicht gespeichert', 'warn'); return; }
     api.updateSettings(settings);
-    setAiApiKey(apiKey);
-    notify('Einstellungen gespeichert', 'ok');
+    notify('Einstellungen übernommen', 'ok');
     onClose();
   };
 
@@ -93,7 +99,8 @@ export default function SettingsDialog({ api, shortcut, onShortcutChange, onClos
     try {
       const text = await file.text();
       const res = importCsv(text);
-      api.importCsvBookmarks(res.bookmarks, res.categoryNames);
+      if (res.fullState && !confirm('Vollständige CSV-Sicherung wiederherstellen? Der aktuelle Bestand wird ersetzt.')) return;
+      api.importState(res.state, res.fullState ? 'replace' : 'merge');
       notify(
         'CSV importiert',
         'ok',
@@ -282,7 +289,7 @@ export default function SettingsDialog({ api, shortcut, onShortcutChange, onClos
               onChange={(e) => setSettings((s) => ({ ...s, autoBackup: e.target.checked }))}
             />
             <span>
-              <strong>Wöchentliche Auto-Sicherung</strong> — rein lokal: Snapshots in IndexedDB, die letzten 8 Wochen
+              <strong>Wöchentliche Auto-Sicherung</strong> — rein lokal: Snapshots in IndexedDB, die letzten 8 Sicherungen (Prüfung bei geöffneter App)
             </span>
           </label>
           <div className="export-row">

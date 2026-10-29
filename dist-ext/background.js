@@ -1,5 +1,14 @@
 "use strict";
 (() => {
+  // src/host.ts
+  function urlKey(url) {
+    try {
+      return new URL(url).href.replace(/\/$/, "");
+    } catch {
+      return url;
+    }
+  }
+
   // src/categorizer.ts
   function categorize(url, title, folderPath, rules) {
     let host = "";
@@ -481,12 +490,13 @@
           status: "local",
           kind: sig.kind,
           reason: sig.reason,
+          verified: false,
           repo: repo ? { owner: repo.owner, name: repo.name, cloneUrl: repo.cloneUrl } : void 0
         };
       }
     }
     if (HOSTED_WEB_SUFFIXES.some((s) => host === s || host.endsWith(`.${s}`))) {
-      return { status: "online", kind: "web", launchUrl: url, reason: `Gehostete Web-App (${host})` };
+      return { status: "online", kind: "web", launchUrl: url, reason: `Gehostete Webseite (${host}); Kosten und Funktion ungepr\xFCft`, verified: false };
     }
     if (REPO_HOSTS.has(host)) {
       const repo = parseRepo(url);
@@ -495,6 +505,163 @@
       }
     }
     return void 0;
+  }
+
+  // src/storage.ts
+  var STORAGE_KEY = "bdm-state-v1";
+  var AI_KEY_STORAGE = "bdm-ai-key";
+  var chromeApi = globalThis.chrome;
+  var DEFAULT_SETTINGS = {
+    favorites: [],
+    startMinimized: false,
+    aiProvider: "local",
+    aiEndpoint: "",
+    aiModel: "",
+    clickerEnabled: true,
+    faviconsEnabled: true,
+    visionOnSave: false,
+    visionModel: "glm-5.3-flash",
+    autoBackup: true
+  };
+  function migrateState(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const parsed = raw;
+    if (!Array.isArray(parsed.bookmarks) || !Array.isArray(parsed.categories)) return null;
+    if (parsed.version !== void 0 && ![1, 2, 3].includes(parsed.version)) return null;
+    if (!validStateData(parsed)) return null;
+    const oldVersion = parsed.version ?? 1;
+    return {
+      version: 3,
+      // Tag-Bereinigung (idempotent): normalisieren, deduplizieren, Teil-Tag-Varianten
+      // entfernen („open"/„lyric" neben „openai"/„lyric-videos") — korrigiert auch
+      // Bestände, die mit einer älteren Engine-Version erzeugt wurden.
+      // Bei v2 → v3 zusätzlich: statische 1Clicker-Nutzungsweg-Klassifikation.
+      bookmarks: parsed.bookmarks.map((b) => upgradeClicker(cleanBookmarkTags(b), oldVersion)),
+      categories: parsed.categories,
+      rules: Array.isArray(parsed.rules) ? parsed.rules : [],
+      glossary: Array.isArray(parsed.glossary) ? parsed.glossary : [],
+      dynamicGroups: Array.isArray(parsed.dynamicGroups) ? parsed.dynamicGroups : [],
+      settings: { ...DEFAULT_SETTINGS, ...parsed.settings ?? {} }
+    };
+  }
+  var record = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+  var strings = (v) => Array.isArray(v) && v.every((s) => typeof s === "string");
+  var finite = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+  function isWebUrl(v) {
+    if (typeof v !== "string") return false;
+    try {
+      const u = new URL(v);
+      return ["http:", "https:"].includes(u.protocol) && !!u.hostname && !u.username && !u.password;
+    } catch {
+      return false;
+    }
+  }
+  function validStateData(s) {
+    const cats = s.categories;
+    if (!cats.every((c) => record(c) && typeof c.id === "string" && !!c.id && typeof c.name === "string" && (c.parentId === null || typeof c.parentId === "string") && ["import", "auto", "manual", "rule", "seed"].includes(String(c.source)))) return false;
+    const parents = new Map(cats.map((c) => [c.id, c.parentId]));
+    if (parents.size !== cats.length) return false;
+    for (const [id, parent] of parents) {
+      const seen = /* @__PURE__ */ new Set([id]);
+      let cur = parent;
+      while (cur !== null) {
+        if (!parents.has(cur) || seen.has(cur)) return false;
+        seen.add(cur);
+        cur = parents.get(cur);
+      }
+    }
+    const ids = /* @__PURE__ */ new Set();
+    if (!s.bookmarks.every((b) => {
+      if (!record(b) || typeof b.id !== "string" || !b.id || ids.has(b.id) || typeof b.title !== "string" || !isWebUrl(b.url) || !finite(b.added) || !strings(b.tags) || !strings(b.categoryIds) || b.categoryIds.some((id) => !parents.has(id)) || typeof b.pinned !== "boolean" || b.note !== void 0 && typeof b.note !== "string" || b.openedCount !== void 0 && !finite(b.openedCount) || b.lastOpenedAt !== void 0 && !finite(b.lastOpenedAt) || b.capturedAt !== void 0 && !finite(b.capturedAt) || b.source !== void 0 && b.source !== "copyNpaste") return false;
+      ids.add(b.id);
+      if (b.clicker !== void 0) {
+        const c = b.clicker;
+        if (!record(c) || !["checking", "online", "local", "none"].includes(String(c.status)) || !["repo", "web", "docker", "portable", "cmd"].includes(String(c.kind)) || c.launchUrl !== void 0 && !isWebUrl(c.launchUrl) || c.checkedAt !== void 0 && !finite(c.checkedAt) || c.reason !== void 0 && typeof c.reason !== "string" || c.verified !== void 0 && typeof c.verified !== "boolean" || c.repo !== void 0 && (!record(c.repo) || typeof c.repo.owner !== "string" || typeof c.repo.name !== "string" || !isWebUrl(c.repo.cloneUrl))) return false;
+      }
+      return true;
+    })) return false;
+    const arrays = [
+      ["rules", (r) => ["domain", "keyword"].includes(String(r.kind)) && typeof r.pattern === "string" && strings(r.categories) && typeof r.enabled === "boolean"],
+      ["glossary", (g) => typeof g.term === "string" && typeof g.definition === "string" && strings(g.related) && finite(g.createdAt)],
+      ["dynamicGroups", (g) => typeof g.name === "string" && strings(g.terms) && finite(g.createdAt)]
+    ];
+    for (const [key, validate] of arrays) {
+      if (s[key] === void 0) continue;
+      const seen = /* @__PURE__ */ new Set();
+      if (!Array.isArray(s[key]) || !s[key].every((x) => {
+        if (!record(x) || typeof x.id !== "string" || !x.id || seen.has(x.id) || !validate(x)) return false;
+        seen.add(x.id);
+        return true;
+      })) return false;
+    }
+    if (s.settings !== void 0) {
+      if (!record(s.settings)) return false;
+      for (const [key, value] of Object.entries(s.settings)) {
+        if (key === "favorites" ? !strings(value) : key in DEFAULT_SETTINGS && typeof value !== typeof DEFAULT_SETTINGS[key]) return false;
+      }
+      if (s.settings.aiProvider !== void 0 && !["local", "api"].includes(String(s.settings.aiProvider))) return false;
+    }
+    return true;
+  }
+  function upgradeClicker(bm, oldVersion) {
+    if (oldVersion >= 3 && bm.clicker !== void 0) return bm;
+    const info = classifyClicker(bm.url, bm.title, bm.tags);
+    return info ? { ...bm, clicker: info } : bm;
+  }
+  function cleanBookmarkTags(bm) {
+    if (!Array.isArray(bm.tags) || bm.tags.length === 0) return bm;
+    const seen = /* @__PURE__ */ new Set();
+    const normalized = [];
+    for (const raw of bm.tags) {
+      const t = String(raw).toLowerCase().trim().replace(/\s+/g, "-");
+      if (t && !seen.has(t)) {
+        seen.add(t);
+        normalized.push(t);
+      }
+    }
+    const cleaned = normalized.filter((t) => !(t.length >= 4 && normalized.some((o) => o !== t && o.length > t.length && o.includes(t))));
+    return cleaned.length === bm.tags.length && cleaned.every((t, i) => t === bm.tags[i]) ? bm : { ...bm, tags: cleaned };
+  }
+  function readLocal() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return createSeedState();
+    const parsed = migrateState(JSON.parse(raw));
+    if (!parsed) throw new Error("Gespeicherte Daten sind ung\xFCltig. Der vorhandene Bestand wurde nicht \xFCberschrieben.");
+    return parsed;
+  }
+  async function loadStateAsync() {
+    if (chromeApi?.storage?.local) {
+      const bag = await chromeApi.storage.local.get(STORAGE_KEY);
+      if (bag[STORAGE_KEY] === void 0) return createSeedState();
+      const parsed = migrateState(bag[STORAGE_KEY]);
+      if (parsed) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        } catch {
+        }
+        return parsed;
+      }
+      throw new Error("Gespeicherte Add-on-Daten sind ung\xFCltig. Bitte eine g\xFCltige JSON-Sicherung importieren.");
+    }
+    return readLocal();
+  }
+  async function saveState(state) {
+    if (!migrateState(state)) throw new Error("Ung\xFCltiger Zustand wurde nicht gespeichert.");
+    if (chromeApi?.storage?.local) {
+      await chromeApi.storage.local.set({ [STORAGE_KEY]: state });
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+  }
+  async function getAiApiKey() {
+    if (chromeApi?.storage?.local) {
+      const bag = await chromeApi.storage.local.get(AI_KEY_STORAGE);
+      if (typeof bag[AI_KEY_STORAGE] === "string") return bag[AI_KEY_STORAGE];
+      const old = typeof localStorage !== "undefined" ? localStorage.getItem(AI_KEY_STORAGE) : null;
+      if (old) await chromeApi.storage.local.set({ [AI_KEY_STORAGE]: old });
+      return old ?? "";
+    }
+    return localStorage.getItem(AI_KEY_STORAGE) ?? "";
   }
 
   // src/applyBookmark.ts
@@ -514,8 +681,9 @@
     return { state: s, ids };
   }
   function addBookmarkToState(state, input, opts = {}) {
-    const url = input.url.startsWith("http") ? input.url : `https://${input.url}`;
-    const dup = state.bookmarks.find((b) => b.url.toLowerCase().replace(/\/$/, "") === url.toLowerCase().replace(/\/$/, ""));
+    const url = /^https?:\/\//i.test(input.url.trim()) ? input.url.trim() : `https://${input.url.trim()}`;
+    if (!isWebUrl(url) || /^[a-z][a-z\d+.-]*:\/\//i.test(input.url) && !/^https?:\/\//i.test(input.url)) return null;
+    const dup = state.bookmarks.find((b) => urlKey(b.url) === urlKey(url));
     if (dup) return null;
     const auto = categorize(url, input.title, input.folderPath ?? [], state.rules);
     let extraCategories = [];
@@ -543,114 +711,6 @@
     return { state: { ...s1, bookmarks: [bookmark, ...s1.bookmarks] }, bookmark };
   }
 
-  // src/storage.ts
-  var STORAGE_KEY = "bdm-state-v1";
-  var AI_KEY_STORAGE = "bdm-ai-key";
-  var chromeApi = globalThis.chrome;
-  var DEFAULT_SETTINGS = {
-    favorites: [],
-    startMinimized: false,
-    aiProvider: "local",
-    aiEndpoint: "",
-    aiModel: "",
-    clickerEnabled: true,
-    faviconsEnabled: true,
-    visionOnSave: false,
-    visionModel: "glm-5.3-flash",
-    autoBackup: true
-  };
-  function migrateState(raw) {
-    if (!raw || typeof raw !== "object") return null;
-    const parsed = raw;
-    if (!Array.isArray(parsed.bookmarks) || !Array.isArray(parsed.categories)) return null;
-    const oldVersion = parsed.version ?? 1;
-    return {
-      version: 3,
-      // Tag-Bereinigung (idempotent): normalisieren, deduplizieren, Teil-Tag-Varianten
-      // entfernen („open"/„lyric" neben „openai"/„lyric-videos") — korrigiert auch
-      // Bestände, die mit einer älteren Engine-Version erzeugt wurden.
-      // Bei v2 → v3 zusätzlich: statische 1Clicker-Nutzungsweg-Klassifikation.
-      bookmarks: parsed.bookmarks.map((b) => upgradeClicker(cleanBookmarkTags(b), oldVersion)),
-      categories: parsed.categories,
-      rules: Array.isArray(parsed.rules) ? parsed.rules : [],
-      glossary: Array.isArray(parsed.glossary) ? parsed.glossary : [],
-      dynamicGroups: Array.isArray(parsed.dynamicGroups) ? parsed.dynamicGroups : [],
-      settings: { ...DEFAULT_SETTINGS, ...parsed.settings ?? {} }
-    };
-  }
-  function upgradeClicker(bm, oldVersion) {
-    if (oldVersion >= 3 && bm.clicker !== void 0) return bm;
-    const info = classifyClicker(bm.url, bm.title, bm.tags);
-    return info ? { ...bm, clicker: info } : bm;
-  }
-  function cleanBookmarkTags(bm) {
-    if (!Array.isArray(bm.tags) || bm.tags.length === 0) return bm;
-    const seen = /* @__PURE__ */ new Set();
-    const normalized = [];
-    for (const raw of bm.tags) {
-      const t = String(raw).toLowerCase().trim().replace(/\s+/g, "-");
-      if (t && !seen.has(t)) {
-        seen.add(t);
-        normalized.push(t);
-      }
-    }
-    const cleaned = normalized.filter((t) => !(t.length >= 4 && normalized.some((o) => o !== t && o.length > t.length && o.includes(t))));
-    return cleaned.length === bm.tags.length && cleaned.every((t, i) => t === bm.tags[i]) ? bm : { ...bm, tags: cleaned };
-  }
-  function readLocal() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = migrateState(JSON.parse(raw));
-        if (parsed) return parsed;
-      }
-      return createSeedState();
-    } catch {
-      return createSeedState();
-    }
-  }
-  async function loadStateAsync() {
-    if (chromeApi?.storage?.local) {
-      try {
-        const bag = await chromeApi.storage.local.get(STORAGE_KEY);
-        const parsed = migrateState(bag[STORAGE_KEY]);
-        if (parsed) {
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-          } catch {
-          }
-          return parsed;
-        }
-        return createSeedState();
-      } catch {
-        return readLocal();
-      }
-    }
-    return readLocal();
-  }
-  function saveStateSync(state) {
-    if (typeof localStorage !== "undefined") {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (err) {
-        console.error("Speichern fehlgeschlagen", err);
-      }
-    }
-    if (chromeApi?.storage?.local) {
-      void chromeApi.storage.local.set({ [STORAGE_KEY]: state }).catch(
-        (err) => console.error("chrome.storage schreiben fehlgeschlagen", err)
-      );
-    }
-    return true;
-  }
-  function getAiApiKey() {
-    try {
-      return localStorage.getItem(AI_KEY_STORAGE) ?? "";
-    } catch {
-      return "";
-    }
-  }
-
   // src/ai/vision.ts
   function toStringArray(value) {
     return Array.isArray(value) ? value.filter((v) => typeof v === "string") : [];
@@ -662,7 +722,7 @@
     });
     const endpoint = settings.aiEndpoint.trim().replace(/\/+$/, "");
     const model = (settings.visionModel || "glm-5.3-flash").trim();
-    const key = getAiApiKey();
+    const key = await getAiApiKey();
     if (settings.aiProvider !== "api" || !endpoint || !key || !imageDataUrl.startsWith("data:image/")) {
       return local();
     }
@@ -755,10 +815,11 @@ Analysiere den Screenshot.`
       bitmap.close();
       const out = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.55 });
       return await new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(String(fr.result));
-        fr.onerror = () => reject(fr.error);
-        fr.readAsDataURL(out);
+        void out.arrayBuffer().then((buffer) => {
+          let binary = "";
+          for (const byte of new Uint8Array(buffer)) binary += String.fromCharCode(byte);
+          resolve(`data:image/jpeg;base64,${btoa(binary)}`);
+        }, reject);
       });
     } catch {
       return dataUrl;
@@ -770,17 +831,17 @@ Analysiere den Screenshot.`
       const shots = bag[SHOTS_KEY] ?? {};
       shots[bookmarkId] = dataUrl;
       const ids = Object.keys(shots);
-      if (ids.length > SHOTS_MAX) {
-        const state = await loadStateAsync();
-        const order = new Map(state.bookmarks.map((b, i) => [b.id, i]));
-        ids.sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity));
-        for (const id of ids.slice(0, ids.length - SHOTS_MAX)) delete shots[id];
-      }
+      for (const id of ids.slice(0, Math.max(0, ids.length - SHOTS_MAX))) delete shots[id];
       await chrome.storage.local.set({ [SHOTS_KEY]: shots });
     } catch {
     }
   }
-  async function saveCurrentTab() {
+  var saves = Promise.resolve({ ok: true });
+  function saveCurrentTab() {
+    saves = saves.catch(() => ({ ok: false })).then(saveTab).catch(() => ({ ok: false, reason: "storage", error: "Speichern fehlgeschlagen. Bitte den Manager und den verf\xFCgbaren Speicher pr\xFCfen." }));
+    return saves;
+  }
+  async function saveTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url ?? "";
     const title = tab?.title ?? "";
@@ -796,6 +857,7 @@ Analysiere den Screenshot.`
       bookmark = { ...bookmark, clicker: info };
       nextState = { ...nextState, bookmarks: nextState.bookmarks.map((b) => b.id === bookmark.id ? bookmark : b) };
     }
+    await saveState(nextState);
     let vision = "off";
     let visionTags;
     if (state.settings.visionOnSave && state.settings.aiProvider === "api" && state.settings.aiEndpoint) {
@@ -814,18 +876,21 @@ Analysiere den Screenshot.`
           if (res.tags.length > 0) {
             visionTags = res.tags;
             const merged = [.../* @__PURE__ */ new Set([...bookmark.tags, ...res.tags])];
-            const { state: s2, ids } = mapNamesToIds(res.categories, nextState);
-            bookmark = { ...bookmark, tags: merged, categoryIds: [.../* @__PURE__ */ new Set([...bookmark.categoryIds, ...ids])] };
+            const current = await loadStateAsync();
+            const existing = current.bookmarks.find((b) => b.id === bookmark.id);
+            if (!existing) return { ok: true, vision };
+            const { state: s2, ids } = mapNamesToIds(res.categories, current);
+            bookmark = { ...existing, tags: [.../* @__PURE__ */ new Set([...existing.tags, ...merged])], categoryIds: [.../* @__PURE__ */ new Set([...existing.categoryIds, ...ids])] };
             nextState = {
               ...s2,
               bookmarks: s2.bookmarks.map((b) => b.id === bookmark.id ? bookmark : b)
             };
+            await saveState(nextState);
           }
         }
       } catch {
       }
     }
-    saveStateSync(nextState);
     const names = bookmark.categoryIds.map((id) => nextState.categories.find((c) => c.id === id)?.name ?? "").filter(Boolean);
     return { ok: true, categories: names, visionTags, vision };
   }
@@ -851,7 +916,7 @@ Analysiere den Screenshot.`
             return;
           }
           const state = await loadStateAsync();
-          const saved = state.bookmarks.some((b) => b.url.toLowerCase().replace(/\/$/, "") === url.toLowerCase().replace(/\/$/, ""));
+          const saved = state.bookmarks.some((b) => urlKey(b.url) === urlKey(url));
           sendResponse({ url, title: tab?.title, saved });
           return;
         }
@@ -868,7 +933,7 @@ Analysiere den Screenshot.`
         default:
           sendResponse(null);
       }
-    })();
+    })().catch(() => sendResponse({ ok: false, error: "Daten konnten nicht geladen werden." }));
     return true;
   });
 })();

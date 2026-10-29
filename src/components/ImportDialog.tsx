@@ -1,3 +1,4 @@
+import { urlKey } from '../host';
 import { useEffect, useRef, useState } from 'react';
 import type { BookmarksApi } from '../hooks/useBookmarks';
 import { parseNetscapeHtml } from '../parser/netscape';
@@ -57,8 +58,8 @@ export default function ImportDialog({ api, onClose, onLearnGlossary, notify }: 
         if (parsed.bookmarks.length === 0) {
           setResult('Keine Lesezeichen in der Datei gefunden (Netscape-HTML erwartet).');
         } else {
-          const existing = new Set(api.state.bookmarks.map((b) => b.url.toLowerCase().replace(/\/$/, '')));
-          const fresh = parsed.bookmarks.filter((b) => !existing.has(b.url.toLowerCase().replace(/\/$/, '')));
+          const existing = new Set(api.state.bookmarks.map((b) => urlKey(b.url)));
+          const fresh = parsed.bookmarks.filter((b) => !existing.has(urlKey(b.url)));
 
           // KI-Routing: lokale Engine (Standard) oder eigene API. Die Ergebnisse
           // werden dem Import übergeben (Map URL → Analyse) und dort angewendet.
@@ -72,7 +73,7 @@ export default function ImportDialog({ api, onClose, onLearnGlossary, notify }: 
             );
             usedProvider = info.used === 'api' ? 'API' : 'lokal';
             if (info.fallbackReason) notify('KI-API nicht erreichbar — lokale Engine übernimmt', 'warn', info.fallbackReason);
-            analyses = new Map(fresh.map((b, i) => [b.url.toLowerCase().replace(/\/$/, ''), results[i]]));
+            analyses = new Map(fresh.map((b, i) => [urlKey(b.url), results[i]]));
           }
           api.importNetscape(parsed, { smart, analyses });
 

@@ -119,7 +119,7 @@ export default function CommandPalette({ api, onClose, onSelect, notify }: Props
 
   const activate = (row: Row) => {
     if (row.kind === 'command') row.run();
-    else window.open(row.url, '_blank', 'noreferrer noopener');
+    else { api.markOpened(row.bookmarkId); window.open(row.url, '_blank', 'noreferrer noopener'); }
     if (!(row.kind === 'bookmark')) onClose();
   };
 

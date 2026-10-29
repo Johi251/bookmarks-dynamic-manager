@@ -5,6 +5,8 @@ ANFORDERUNGEN.md
 .data/
 src-tauri/target/
 dist-desktop/
+dist-web/
+releases/v*/
 releases/ext-chrome/
 releases/ext-firefox/
 assets-source/

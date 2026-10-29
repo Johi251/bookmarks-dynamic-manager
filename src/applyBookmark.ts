@@ -1,8 +1,10 @@
+import { urlKey } from './host';
 import type { AppState, Bookmark, Category } from './types';
 import { categorize } from './categorizer';
 import { uid } from './rules';
 import { analyzeBookmark } from './ai/engine';
 import { classifyClicker } from './oneclicker';
+import { isWebUrl } from './storage';
 
 /**
  * Gemeinsame Kern-Logik „Lesezeichen in Zustand einfügen" — genutzt von der App
@@ -55,8 +57,9 @@ export function addBookmarkToState(
   input: NewBookmarkInput,
   opts: AddOptions = {}
 ): { state: AppState; bookmark: Bookmark } | null {
-  const url = input.url.startsWith('http') ? input.url : `https://${input.url}`;
-  const dup = state.bookmarks.find((b) => b.url.toLowerCase().replace(/\/$/, '') === url.toLowerCase().replace(/\/$/, ''));
+  const url = /^https?:\/\//i.test(input.url.trim()) ? input.url.trim() : `https://${input.url.trim()}`;
+  if (!isWebUrl(url) || (/^[a-z][a-z\d+.-]*:\/\//i.test(input.url) && !/^https?:\/\//i.test(input.url))) return null;
+  const dup = state.bookmarks.find((b) => urlKey(b.url) === urlKey(url));
   if (dup) return null;
 
   const auto = categorize(url, input.title, input.folderPath ?? [], state.rules);

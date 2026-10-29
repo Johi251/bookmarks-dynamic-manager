@@ -1,6 +1,6 @@
 /** Datenmodell des Bookmarks Dynamic Manager. */
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 export interface Bookmark {
   id: string;
@@ -14,6 +14,12 @@ export interface Bookmark {
   note?: string;
   /** 1Clicker-Status-Engine: Nutzungsweg-Analyse für Software-/Repository-Links. */
   clicker?: ClickerInfo;
+  /** Wie oft der Link aus der App geöffnet wurde (Sortierung „Häufig verwendet"). */
+  openedCount?: number;
+  /** Letzter Öffnen-Zeitpunkt (epoch ms) — Sortierung „Zuletzt verwendet". */
+  lastOpenedAt?: number;
+  source?: 'copyNpaste';
+  capturedAt?: number;
 }
 
 // ── 1Clicker-Protokoll (Nutzungswege wie im 1Clicker-Werkzeugkasten) ────────
@@ -41,6 +47,8 @@ export interface ClickerInfo {
   repo?: { owner: string; name: string; cloneUrl: string };
   /** Menschenlesbarer Grund des erkannten Nutzungswegs (Tooltip/Badge-Dialog). */
   reason?: string;
+  /** Expliziter Nachweis des aKlik-Protokolls; Heuristiken bleiben Hinweise. */
+  verified?: boolean;
 }
 
 export type CategorySource = 'import' | 'auto' | 'manual' | 'rule' | 'seed';
@@ -136,15 +144,31 @@ export type SmartViewKey =
   | 'pinned'
   | 'uncategorized'
   | 'clicker-online'
-  | 'clicker-local';
+  | 'clicker-local'
+  | 'recent'
+  | 'hunt';
 
 export const SMART_VIEWS: { key: SmartViewKey; label: string; icon: string }[] = [
+  { key: 'hunt', label: "Today's Hunt", icon: 'sparkles' },
   { key: 'today', label: 'Neu heute', icon: 'sparkles' },
   { key: 'week', label: 'Neu (7 Tage)', icon: 'clock' },
+  { key: 'recent', label: 'Zuletzt verwendet', icon: 'history' },
   { key: 'github', label: 'GitHub', icon: 'github' },
   { key: 'ki', label: 'KI-Tools', icon: 'bot' },
   { key: 'pinned', label: 'Angepinnt', icon: 'pin' },
   { key: 'clicker-online', label: '1Clicker · Online', icon: 'zap' },
   { key: 'clicker-local', label: '1Clicker · Lokal', icon: 'monitor' },
   { key: 'uncategorized', label: 'Ohne Kategorie', icon: 'help' },
+];
+
+/** Sortier-Modi der Lesezeichenliste (persönlich speicherbar). */
+export type SortMode = 'newest' | 'oldest' | 'title' | 'host' | 'popular' | 'recent';
+
+export const SORT_MODES: { key: SortMode; label: string }[] = [
+  { key: 'newest', label: 'Neueste zuerst' },
+  { key: 'oldest', label: 'Älteste zuerst' },
+  { key: 'title', label: 'Titel A–Z' },
+  { key: 'host', label: 'Webseite A–Z' },
+  { key: 'popular', label: 'Häufig verwendet' },
+  { key: 'recent', label: 'Zuletzt verwendet' },
 ];

@@ -1,22 +1,25 @@
 import { useEffect, useState } from 'react';
 import Icon, { type IconName } from './Icon';
 
-/** Dezente Rückmeldungen für Aktionen (Mikro-Interaktion: sofortiges Feedback). */
+/** Dezente Rückmeldungen für Aktionen (Mikro-Interaktion: sofortiges Feedback).
+    Optional mit Aktions-Button (z. B. „Rückgängig" nach dem Löschen). */
 export interface Toast {
   id: number;
   text: string;
   kind: 'ok' | 'info' | 'warn';
   detail?: string;
+  action?: { label: string; run: () => void };
 }
 
 let nextId = 1;
 
 export function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const push = (text: string, kind: Toast['kind'] = 'ok', detail?: string) => {
-    const t: Toast = { id: nextId++, text, kind, detail };
+  const push = (text: string, kind: Toast['kind'] = 'ok', detail?: string, action?: Toast['action']) => {
+    const t: Toast = { id: nextId++, text, kind, detail, action };
     setToasts((prev) => [...prev.slice(-3), t]);
-    setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== t.id)), 4200);
+    // Meldungen mit Aktion länger stehen lassen, damit sie erreicht werden kann.
+    setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== t.id)), action ? 8000 : 4200);
   };
   return { toasts, push };
 }
@@ -36,6 +39,17 @@ export function ToastHost({ toasts }: { toasts: Toast[] }) {
             <span>{t.text}</span>
             {t.detail && <span className="toast-detail">{t.detail}</span>}
           </div>
+          {t.action && (
+            <button
+              className="toast-action"
+              onClick={(e) => {
+                t.action!.run();
+                (e.currentTarget as HTMLButtonElement).disabled = true;
+              }}
+            >
+              {t.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

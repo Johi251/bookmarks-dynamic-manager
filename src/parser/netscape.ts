@@ -1,3 +1,4 @@
+import { urlKey } from '../host';
 import type { Bookmark, Category } from '../types';
 import { uid } from '../rules';
 
@@ -68,7 +69,7 @@ export function parseNetscapeHtml(html: string): ParsedImport {
       } else if (link) {
         const url = attr(link, 'href') ?? '';
         if (!url || !/^https?:/i.test(url)) continue;
-        const key = url.toLowerCase().replace(/\/$/, '');
+        const key = urlKey(url);
         if (seen.has(key)) {
           skippedDuplicates++;
           continue;

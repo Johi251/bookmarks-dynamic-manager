@@ -1,7 +1,8 @@
+import { urlKey } from '../host';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { AppSettings, AppState, Bookmark, Category, CategorizeRule, GlossaryEntry } from '../types';
 import { categorize } from '../categorizer';
-import { clearState, loadStateAsync, migrateState, saveStateSync, subscribeChanges } from '../storage';
+import { loadStateAsync, migrateState, saveState, subscribeChanges } from '../storage';
 import { createDemoBookmarks } from '../demo';
 import { createSeedState, uid } from '../rules';
 import { addBookmarkToState, mapNamesToIds, type NewBookmarkInput } from '../applyBookmark';
@@ -9,6 +10,7 @@ import { analyzeBookmark, type SmartAnalysis } from '../ai/engine';
 import { matchGlossary } from '../glossary';
 import { classifyClicker } from '../oneclicker';
 import type { ParsedImport } from '../parser/netscape';
+import type { HuntItem } from '../integrations';
 
 export interface ImportEnrichment {
   /** KI-Strukturierung anwenden (Meta-Tags + Glossar-Kategorien). */
@@ -22,13 +24,25 @@ export interface BookmarksApi {
   state: AppState;
   /** true, sobald der persistierte Zustand geladen wurde (Kompaktstart etc.). */
   ready: boolean;
+  storageError: string | null;
+  retrySave: () => void;
+  acceptHunt: (items: HuntItem[]) => Promise<void>;
+  /** globale Rückgängig-/Wiederholen-Historie (Strg+Z / Strg+Shift+Z). */
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
   addBookmark: (input: Omit<NewBookmarkInput, 'folderPath' | 'added' | 'id'>) => void;
   updateBookmark: (id: string, patch: Partial<Omit<Bookmark, 'id'>>) => void;
   removeBookmark: (id: string) => void;
+  removeMany: (ids: string[]) => void;
+  mergeDuplicates: (groups: string[][]) => void;
   togglePin: (id: string) => void;
+  setPinned: (ids: string[], pinned: boolean) => void;
+  /** Öffnungs-Statistik (Zähler + Zeitstempel) — bewusst NICHT rückgängig machbar. */
+  markOpened: (id: string) => void;
   importNetscape: (parsed: ParsedImport, enrich?: ImportEnrichment) => void;
   importState: (imported: AppState, mode: 'merge' | 'replace') => void;
-  importCsvBookmarks: (bookmarks: Bookmark[], categoryNames: string[]) => void;
   addCategory: (name: string, parentId?: string | null) => Category;
   setRules: (rules: CategorizeRule[]) => void;
   recategorizeAll: () => void;
@@ -45,8 +59,10 @@ export interface BookmarksApi {
   removeDynamicGroup: (id: string) => void;
   // Zuordnungen & Tags
   assignToCategory: (bookmarkId: string, categoryId: string) => void;
+  assignManyToCategory: (ids: string[], categoryId: string) => void;
   unassignFromCategory: (bookmarkId: string, categoryId: string) => void;
   addTag: (bookmarkId: string, tag: string) => void;
+  addTagToMany: (ids: string[], tag: string) => void;
   removeTag: (bookmarkId: string, tag: string) => void;
   // Einstellungen
   updateSettings: (patch: Partial<AppSettings>) => void;
@@ -55,14 +71,19 @@ export interface BookmarksApi {
 
 type Action =
   | { type: 'hydrate'; state: AppState }
+  | { type: 'undo' }
+  | { type: 'redo' }
   | { type: 'add'; input: NewBookmarkInput }
   | { type: 'update'; id: string; patch: Partial<Omit<Bookmark, 'id'>> }
   | { type: 'remove'; id: string }
+  | { type: 'removeMany'; ids: string[] }
+  | { type: 'mergeDuplicates'; groups: string[][] }
+  | { type: 'markOpened'; id: string }
   | { type: 'pin'; id: string }
+  | { type: 'pinMany'; ids: string[]; pinned: boolean }
   | { type: 'importNet'; parsed: ParsedImport; enrich?: ImportEnrichment }
   | { type: 'importState'; imported: AppState; mode: 'merge' | 'replace' }
-  | { type: 'importCsv'; bookmarks: Bookmark[]; categoryNames: string[] }
-  | { type: 'addCategory'; name: string; parentId?: string | null }
+  | { type: 'addCategory'; category: Category }
   | { type: 'setRules'; rules: CategorizeRule[] }
   | { type: 'recategorize' }
   | { type: 'demo' }
@@ -73,8 +94,10 @@ type Action =
   | { type: 'groupAdd'; name: string; terms: string[] }
   | { type: 'groupRemove'; id: string }
   | { type: 'assign'; bookmarkId: string; categoryId: string }
+  | { type: 'assignMany'; ids: string[]; categoryId: string }
   | { type: 'unassign'; bookmarkId: string; categoryId: string }
   | { type: 'tagAdd'; bookmarkId: string; tag: string }
+  | { type: 'tagAddMany'; ids: string[]; tag: string }
   | { type: 'tagRemove'; bookmarkId: string; tag: string }
   | { type: 'settings'; patch: Partial<AppSettings> };
 
@@ -96,7 +119,7 @@ function applyGlossaryToBookmark(bm: Bookmark, state: AppState): { bookmark: Boo
   return { bookmark: { ...bm, tags: newTags, categoryIds: [...new Set([...bm.categoryIds, ...ids])] }, state: s2, changed: newTags.length !== bm.tags.length || ids.some((id) => !bm.categoryIds.includes(id)) };
 }
 
-function reducer(state: AppState, action: Action): AppState {
+export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'hydrate':
       return action.state;
@@ -112,17 +135,48 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case 'remove':
       return { ...state, bookmarks: state.bookmarks.filter((b) => b.id !== action.id) };
+    case 'removeMany': {
+      const ids = new Set(action.ids);
+      return { ...state, bookmarks: state.bookmarks.filter((b) => !ids.has(b.id)) };
+    }
+    case 'mergeDuplicates': {
+      let bookmarks = state.bookmarks;
+      for (const ids of action.groups) {
+        const members = ids.map((id) => bookmarks.find((b) => b.id === id)).filter((b): b is Bookmark => !!b);
+        if (members.length < 2 || members.some((b) => b.url !== members[0].url && new URL(b.url).href.replace(/\/$/, '') !== new URL(members[0].url).href.replace(/\/$/, ''))) continue;
+        const keep = { ...members[0], tags: [...new Set(members.flatMap((b) => b.tags))], categoryIds: [...new Set(members.flatMap((b) => b.categoryIds))],
+          note: [...new Set(members.map((b) => b.note).filter(Boolean))].join('\n\n') || undefined,
+          pinned: members.some((b) => b.pinned), openedCount: members.reduce((n, b) => n + (b.openedCount ?? 0), 0),
+          lastOpenedAt: Math.max(...members.map((b) => b.lastOpenedAt ?? 0)) || undefined };
+        bookmarks = bookmarks.filter((b) => !ids.includes(b.id) || b.id === keep.id).map((b) => b.id === keep.id ? keep : b);
+      }
+      return { ...state, bookmarks };
+    }
+    case 'markOpened':
+      return {
+        ...state,
+        bookmarks: state.bookmarks.map((b) =>
+          b.id === action.id ? { ...b, openedCount: (b.openedCount ?? 0) + 1, lastOpenedAt: Date.now() } : b
+        ),
+      };
     case 'pin':
       return {
         ...state,
         bookmarks: state.bookmarks.map((b) => (b.id === action.id ? { ...b, pinned: !b.pinned } : b)),
       };
+    case 'pinMany': {
+      const ids = new Set(action.ids);
+      return {
+        ...state,
+        bookmarks: state.bookmarks.map((b) => (ids.has(b.id) ? { ...b, pinned: action.pinned } : b)),
+      };
+    }
     case 'importNet': {
       const { parsed, enrich } = action;
       let s: AppState = { ...state, categories: [...state.categories, ...parsed.categories] };
-      const existingUrls = new Set(state.bookmarks.map((b) => b.url.toLowerCase().replace(/\/$/, '')));
+      const existingUrls = new Set(state.bookmarks.map((b) => urlKey(b.url)));
       const fresh = parsed.bookmarks.filter((b) => {
-        const key = b.url.toLowerCase().replace(/\/$/, '');
+        const key = urlKey(b.url);
         if (existingUrls.has(key)) return false;
         existingUrls.add(key);
         return true;
@@ -140,7 +194,7 @@ function reducer(state: AppState, action: Action): AppState {
         let tags = b.tags;
         if (enrich?.smart) {
           const ai =
-            enrich.analyses?.get(b.url.toLowerCase().replace(/\/$/, '')) ??
+            enrich.analyses?.get(urlKey(b.url)) ??
             analyzeBookmark(b.url, b.title, b.tags, state.glossary);
           tags = [...new Set([...b.tags, ...ai.tags])];
           names = [...new Set([...names, ...ai.categories])];
@@ -156,25 +210,28 @@ function reducer(state: AppState, action: Action): AppState {
       const { imported, mode } = action;
       // Alte Exporte (v1/v2) via Migration auf v3 heben — inkl. statischer
       // 1Clicker-Klassifikation und neuer Settings-Defaults.
-      const normalized = migrateState(imported) ?? state;
+      const normalized = migrateState(imported);
+      if (!normalized) return state;
       if (mode === 'replace') return normalized;
       // Merge: Kategorien nach Name deduplizieren, Links nach URL.
       let s: AppState = { ...state };
       const catMap = new Map<string, string>();
-      for (const cat of normalized.categories) {
-        const existing = s.categories.find((c) => c.name.toLowerCase() === cat.name.toLowerCase());
-        if (existing) {
-          catMap.set(cat.id, existing.id);
-        } else {
-          const newCat = { ...cat, id: uid('cat') };
-          s = { ...s, categories: [...s.categories, newCat] };
-          catMap.set(cat.id, newCat.id);
-        }
-      }
-      const existingUrls = new Set(s.bookmarks.map((b) => b.url.toLowerCase().replace(/\/$/, '')));
+      const addCategory = (cat: Category): string => {
+        const known = catMap.get(cat.id);
+        if (known) return known;
+        const parent = cat.parentId ? normalized.categories.find((c) => c.id === cat.parentId) : undefined;
+        const parentId = parent ? addCategory(parent) : null;
+        const existing = s.categories.find((c) => c.parentId === parentId && c.name.toLowerCase() === cat.name.toLowerCase());
+        const id = existing?.id ?? uid('cat');
+        catMap.set(cat.id, id);
+        if (!existing) s = { ...s, categories: [...s.categories, { ...cat, id, parentId }] };
+        return id;
+      };
+      normalized.categories.forEach(addCategory);
+      const existingUrls = new Set(s.bookmarks.map((b) => urlKey(b.url)));
       const fresh = normalized.bookmarks
         .filter((b) => {
-          const key = b.url.toLowerCase().replace(/\/$/, '');
+          const key = urlKey(b.url);
           if (existingUrls.has(key)) return false;
           existingUrls.add(key);
           return true;
@@ -194,34 +251,10 @@ function reducer(state: AppState, action: Action): AppState {
       }
       return { ...s, bookmarks: [...fresh, ...s.bookmarks], rules, glossary, dynamicGroups };
     }
-    case 'importCsv': {
-      const { bookmarks, categoryNames } = action;
-      let s: AppState = { ...state };
-      const { state: s2, ids: catIds } = mapNamesToIds(categoryNames, s);
-      s = s2;
-      const existingUrls = new Set(s.bookmarks.map((b) => b.url.toLowerCase().replace(/\/$/, '')));
-      const fresh = bookmarks.filter((b) => {
-        const key = b.url.toLowerCase().replace(/\/$/, '');
-        if (existingUrls.has(key)) return false;
-        existingUrls.add(key);
-        return true;
-      });
-      const withCats = fresh.map((b) => ({
-        ...b,
-        categoryIds: [...new Set([...b.categoryIds, ...catIds])],
-      }));
-      return { ...s, bookmarks: [...withCats, ...s.bookmarks] };
-    }
     case 'addCategory': {
-      const parent = action.parentId ?? null;
-      const dup = state.categories.find(
-        (c) => c.name.toLowerCase() === action.name.toLowerCase() && c.parentId === parent
-      );
-      if (dup) return state;
-      return {
-        ...state,
-        categories: [...state.categories, { id: uid('cat'), name: action.name.trim(), parentId: parent, source: 'manual' }],
-      };
+      const cat = action.category;
+      if (state.categories.some((c) => c.id === cat.id || (c.parentId === cat.parentId && c.name.toLowerCase() === cat.name.toLowerCase()))) return state;
+      return { ...state, categories: [...state.categories, cat] };
     }
     case 'setRules':
       return { ...state, rules: action.rules };
@@ -241,9 +274,9 @@ function reducer(state: AppState, action: Action): AppState {
     case 'demo': {
       const demo = createDemoBookmarks();
       let s: AppState = { ...state };
-      const existingUrls = new Set(s.bookmarks.map((b) => b.url.toLowerCase()));
+      const existingUrls = new Set(s.bookmarks.map((b) => urlKey(b.url)));
       for (const b of demo) {
-        if (existingUrls.has(b.url.toLowerCase())) continue;
+        if (existingUrls.has(urlKey(b.url))) continue;
         const res = addBookmarkToState(s, { ...b, folderPath: [] }, { enrich: true });
         if (res) s = res.state;
       }
@@ -307,6 +340,17 @@ function reducer(state: AppState, action: Action): AppState {
             : b
         ),
       };
+    case 'assignMany': {
+      const ids = new Set(action.ids);
+      return {
+        ...state,
+        bookmarks: state.bookmarks.map((b) =>
+          ids.has(b.id) && !b.categoryIds.includes(action.categoryId)
+            ? { ...b, categoryIds: [...b.categoryIds, action.categoryId] }
+            : b
+        ),
+      };
+    }
     case 'unassign':
       return {
         ...state,
@@ -322,6 +366,15 @@ function reducer(state: AppState, action: Action): AppState {
         bookmarks: state.bookmarks.map((b) => (b.id === action.bookmarkId && !b.tags.includes(tag) ? { ...b, tags: [...b.tags, tag] } : b)),
       };
     }
+    case 'tagAddMany': {
+      const tag = action.tag.toLowerCase().trim().replace(/\s+/g, '-');
+      if (!tag) return state;
+      const ids = new Set(action.ids);
+      return {
+        ...state,
+        bookmarks: state.bookmarks.map((b) => (ids.has(b.id) && !b.tags.includes(tag) ? { ...b, tags: [...b.tags, tag] } : b)),
+      };
+    }
     case 'tagRemove':
       return {
         ...state,
@@ -334,9 +387,73 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
+// ── Undo/Redo-Historie (Strg+Z / Strg+Shift+Z) ──────────────────────────────
+
+/** Maximale Anzahl rückgängig machbarer Schritte. */
+export const HISTORY_LIMIT = 50;
+
+export interface HistoryState {
+  present: AppState;
+  past: AppState[];
+  future: AppState[];
+}
+
+/**
+ * Reiner History-Reduzierer um den App-Reduzierer: jede Zustandsänderung landet
+ * auf dem Past-Stapel (max. 50), Undo/Redo verschieben zwischen den Stapeln.
+ * No-Op-Ergebnisse (identische Referenz) erzeugen keinen Eintrag.
+ */
+export function reducerWithHistory(h: HistoryState, action: Action): HistoryState {
+  switch (action.type) {
+    case 'hydrate':
+      return { present: action.state, past: [], future: [] };
+    case 'undo': {
+      if (h.past.length === 0) return h;
+      const previous = h.past[h.past.length - 1];
+      return {
+        present: previous,
+        past: h.past.slice(0, -1),
+        future: [h.present, ...h.future].slice(0, HISTORY_LIMIT),
+      };
+    }
+    case 'redo': {
+      if (h.future.length === 0) return h;
+      const next = h.future[0];
+      return {
+        present: next,
+        past: [...h.past, h.present].slice(-HISTORY_LIMIT),
+        future: h.future.slice(1),
+      };
+    }
+    case 'markOpened': {
+      const present = reducer(h.present, action);
+      const opened = present.bookmarks.find((b) => b.id === action.id);
+      if (!opened) return h;
+      const track = (state: AppState): AppState => ({ ...state, bookmarks: state.bookmarks.map((b) => b.id === action.id ? { ...b, openedCount: opened.openedCount, lastOpenedAt: opened.lastOpenedAt } : b) });
+      return { present, past: h.past.map(track), future: h.future.map(track) };
+    }
+    default: {
+      const present = reducer(h.present, action);
+      if (present === h.present) return h;
+      return { present, past: [...h.past, h.present].slice(-HISTORY_LIMIT), future: [] };
+    }
+  }
+}
+
 export function useBookmarks(): BookmarksApi {
-  const [state, dispatch] = useReducer(reducer, undefined, () => createSeedState());
+  const [history, dispatch] = useReducer(reducerWithHistory, undefined, () => ({
+    present: createSeedState(),
+    past: [],
+    future: [],
+  }));
+  const state = history.present;
+  const currentState = useRef(state);
+  currentState.current = state;
   const [ready, setReady] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const [saveAttempt, setSaveAttempt] = useState(0);
+  const writes = useRef(Promise.resolve());
+  const ownWrites = useRef(new Set<string>());
   const lastSerialized = useRef<string | null>(null);
 
   useEffect(() => {
@@ -347,11 +464,11 @@ export function useBookmarks(): BookmarksApi {
       lastSerialized.current = serialized;
       dispatch({ type: 'hydrate', state: loaded });
       setReady(true);
-    });
+    }).catch((error) => { if (alive) setStorageError(String(error instanceof Error ? error.message : error)); });
     // Externe Änderungen (Add-on-Background, anderer Tab) übernehmen.
     const unsubscribe = subscribeChanges((next) => {
       const serialized = JSON.stringify(next);
-      if (serialized !== lastSerialized.current) {
+      if (!ownWrites.current.has(serialized) && serialized !== lastSerialized.current) {
         lastSerialized.current = serialized;
         dispatch({ type: 'hydrate', state: next });
       }
@@ -366,30 +483,72 @@ export function useBookmarks(): BookmarksApi {
     if (!ready) return;
     const serialized = JSON.stringify(state);
     if (serialized === lastSerialized.current) return; // eigene Rückkopplung ignorieren
-    lastSerialized.current = serialized;
-    saveStateSync(state);
-  }, [state, ready]);
+    let alive = true;
+    ownWrites.current.add(serialized);
+    writes.current = writes.current.catch(() => undefined).then(() => saveState(state)).then(() => {
+      lastSerialized.current = serialized;
+      if (alive) setStorageError(null);
+    }).catch((error) => {
+      if (alive) setStorageError(`Nicht gespeichert: ${String(error instanceof Error ? error.message : error)}`);
+    }).finally(() => { ownWrites.current.delete(serialized); });
+    return () => { alive = false; };
+  }, [state, ready, saveAttempt]);
 
   return useMemo<BookmarksApi>(
     () => ({
       state,
       ready,
+      storageError,
+      retrySave: () => setSaveAttempt((n) => n + 1),
+      acceptHunt: async (items) => {
+        if (!ready) throw new Error('Zuerst den gespeicherten Bestand laden.');
+        await writes.current;
+        let next = currentState.current;
+        for (const item of items) {
+          const result = addBookmarkToState(next, { title: item.title, url: item.url, tags: ['todays-hunt', 'copynpaste'], categoryIds: [], pinned: false }, { enrich: true });
+          if (result) next = result.state;
+          const capturedAt = Date.parse(item.capturedAt ?? '') || Date.now();
+          next = { ...next, bookmarks: next.bookmarks.map((b) => urlKey(b.url) === urlKey(item.url) ? { ...b, source: 'copyNpaste' as const, capturedAt } : b) };
+        }
+        const serialized = JSON.stringify(next);
+        ownWrites.current.add(serialized);
+        try {
+          await saveState(next);
+          lastSerialized.current = serialized;
+          dispatch({ type: 'hydrate', state: next });
+          setStorageError(null);
+        } finally { ownWrites.current.delete(serialized); }
+      },
+      undo: () => dispatch({ type: 'undo' }),
+      redo: () => dispatch({ type: 'redo' }),
+      canUndo: history.past.length > 0,
+      canRedo: history.future.length > 0,
       addBookmark: (input) => dispatch({ type: 'add', input }),
       updateBookmark: (id, patch) => dispatch({ type: 'update', id, patch }),
       removeBookmark: (id) => dispatch({ type: 'remove', id }),
+      removeMany: (ids) => dispatch({ type: 'removeMany', ids }),
+      mergeDuplicates: (groups) => dispatch({ type: 'mergeDuplicates', groups }),
       togglePin: (id) => dispatch({ type: 'pin', id }),
+      setPinned: (ids, pinned) => dispatch({ type: 'pinMany', ids, pinned }),
+      markOpened: (id) => dispatch({ type: 'markOpened', id }),
       importNetscape: (parsed, enrich) => dispatch({ type: 'importNet', parsed, enrich }),
-      importState: (imported, mode) => dispatch({ type: 'importState', imported, mode }),
-      importCsvBookmarks: (bookmarks, categoryNames) => dispatch({ type: 'importCsv', bookmarks, categoryNames }),
+      importState: (imported, mode) => {
+        const normalized = migrateState(imported);
+        if (!normalized) throw new Error('Ungültige Sicherung: Bestand bleibt unverändert.');
+        dispatch({ type: 'importState', imported: normalized, mode });
+        setReady(true);
+      },
       addCategory: (name, parentId) => {
-        dispatch({ type: 'addCategory', name, parentId });
-        return state.categories.find((c) => c.name === name) ?? { id: uid('cat'), name, parentId: parentId ?? null, source: 'manual' };
+        const category: Category = state.categories.find((c) => c.name.toLowerCase() === name.trim().toLowerCase() && c.parentId === (parentId ?? null)) ??
+          { id: uid('cat'), name: name.trim(), parentId: parentId ?? null, source: 'manual' };
+        dispatch({ type: 'addCategory', category });
+        return category;
       },
       setRules: (rules) => dispatch({ type: 'setRules', rules }),
       recategorizeAll: () => dispatch({ type: 'recategorize' }),
       loadDemo: () => dispatch({ type: 'demo' }),
       resetAll: () => {
-        clearState();
+        setReady(true);
         dispatch({ type: 'reset' });
       },
       suggestCategories: (url, title) => categorize(url, title, [], state.rules).categories,
@@ -419,8 +578,10 @@ export function useBookmarks(): BookmarksApi {
       addDynamicGroup: (name, terms) => dispatch({ type: 'groupAdd', name, terms }),
       removeDynamicGroup: (id) => dispatch({ type: 'groupRemove', id }),
       assignToCategory: (bookmarkId, categoryId) => dispatch({ type: 'assign', bookmarkId, categoryId }),
+      assignManyToCategory: (ids, categoryId) => dispatch({ type: 'assignMany', ids, categoryId }),
       unassignFromCategory: (bookmarkId, categoryId) => dispatch({ type: 'unassign', bookmarkId, categoryId }),
       addTag: (bookmarkId, tag) => dispatch({ type: 'tagAdd', bookmarkId, tag }),
+      addTagToMany: (ids, tag) => dispatch({ type: 'tagAddMany', ids, tag }),
       removeTag: (bookmarkId, tag) => dispatch({ type: 'tagRemove', bookmarkId, tag }),
       updateSettings: (patch) => dispatch({ type: 'settings', patch }),
       toggleFavorite: (categoryId) =>
@@ -433,6 +594,6 @@ export function useBookmarks(): BookmarksApi {
           },
         }),
     }),
-    [state]
+    [state, history.past.length, history.future.length, ready, storageError]
   );
 }

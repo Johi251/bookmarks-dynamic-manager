@@ -3,8 +3,8 @@ import Icon from './Icon';
 interface Props {
   query: string;
   onQuery: (q: string) => void;
-  tab: 'bookmarks' | 'curated';
-  onTab: (t: 'bookmarks' | 'curated') => void;
+  tab: 'bookmarks' | 'curated' | 'stats';
+  onTab: (t: 'bookmarks' | 'curated' | 'stats') => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   minimized: boolean;
@@ -46,6 +46,7 @@ export default function Toolbar({
         <button role="tab" aria-selected={tab === 'curated'} className={tab === 'curated' ? 'active' : ''} onClick={() => onTab('curated')}>
           Empfehlungen
         </button>
+        <button role="tab" aria-selected={tab === 'stats'} className={tab === 'stats' ? 'active' : ''} onClick={() => onTab('stats')}>Statistik</button>
       </div>
       <div className="search-wrap">
         <Icon name="search" size={14} className="search-icon" />

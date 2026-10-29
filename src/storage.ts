@@ -55,6 +55,8 @@ export function migrateState(raw: unknown): AppState | null {
   if (!raw || typeof raw !== 'object') return null;
   const parsed = raw as Partial<AppState> & { version?: number };
   if (!Array.isArray(parsed.bookmarks) || !Array.isArray(parsed.categories)) return null;
+  if (parsed.version !== undefined && ![1, 2, 3].includes(parsed.version)) return null;
+  if (!validStateData(parsed)) return null;
   const oldVersion = parsed.version ?? 1;
   return {
     version: 3,
@@ -70,6 +72,74 @@ export function migrateState(raw: unknown): AppState | null {
     settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
   };
 }
+
+const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === 'string');
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+export function isWebUrl(v: unknown): v is string {
+  if (typeof v !== 'string') return false;
+  try { const u = new URL(v); return ['http:', 'https:'].includes(u.protocol) && !!u.hostname && !u.username && !u.password; }
+  catch { return false; }
+}
+
+function validStateData(s: Record<string, unknown>): boolean {
+  const cats = s.categories as unknown[];
+  if (!cats.every((c) => record(c) && typeof c.id === 'string' && !!c.id && typeof c.name === 'string' &&
+    (c.parentId === null || typeof c.parentId === 'string') && ['import', 'auto', 'manual', 'rule', 'seed'].includes(String(c.source)))) return false;
+  const parents = new Map(cats.map((c) => [(c as CategoryData).id, (c as CategoryData).parentId]));
+  if (parents.size !== cats.length) return false;
+  for (const [id, parent] of parents) {
+    const seen = new Set([id]);
+    let cur = parent;
+    while (cur !== null) {
+      if (!parents.has(cur) || seen.has(cur)) return false;
+      seen.add(cur); cur = parents.get(cur)!;
+    }
+  }
+  const ids = new Set<string>();
+  if (!(s.bookmarks as unknown[]).every((b) => {
+    if (!record(b) || typeof b.id !== 'string' || !b.id || ids.has(b.id) || typeof b.title !== 'string' ||
+      !isWebUrl(b.url) || !finite(b.added) || !strings(b.tags) || !strings(b.categoryIds) ||
+      b.categoryIds.some((id) => !parents.has(id)) || typeof b.pinned !== 'boolean' ||
+      (b.note !== undefined && typeof b.note !== 'string') ||
+      (b.openedCount !== undefined && !finite(b.openedCount)) || (b.lastOpenedAt !== undefined && !finite(b.lastOpenedAt)) ||
+      (b.capturedAt !== undefined && !finite(b.capturedAt)) || (b.source !== undefined && b.source !== 'copyNpaste')) return false;
+    ids.add(b.id);
+    if (b.clicker !== undefined) {
+      const c = b.clicker;
+      if (!record(c) || !['checking', 'online', 'local', 'none'].includes(String(c.status)) ||
+        !['repo', 'web', 'docker', 'portable', 'cmd'].includes(String(c.kind)) ||
+        (c.launchUrl !== undefined && !isWebUrl(c.launchUrl)) ||
+        (c.checkedAt !== undefined && !finite(c.checkedAt)) ||
+        (c.reason !== undefined && typeof c.reason !== 'string') ||
+        (c.verified !== undefined && typeof c.verified !== 'boolean') ||
+        (c.repo !== undefined && (!record(c.repo) || typeof c.repo.owner !== 'string' || typeof c.repo.name !== 'string' || !isWebUrl(c.repo.cloneUrl)))) return false;
+    }
+    return true;
+  })) return false;
+  const arrays: [string, (x: Record<string, unknown>) => boolean][] = [
+    ['rules', (r) => ['domain', 'keyword'].includes(String(r.kind)) && typeof r.pattern === 'string' && strings(r.categories) && typeof r.enabled === 'boolean'],
+    ['glossary', (g) => typeof g.term === 'string' && typeof g.definition === 'string' && strings(g.related) && finite(g.createdAt)],
+    ['dynamicGroups', (g) => typeof g.name === 'string' && strings(g.terms) && finite(g.createdAt)],
+  ];
+  for (const [key, validate] of arrays) {
+    if (s[key] === undefined) continue;
+    const seen = new Set();
+    if (!Array.isArray(s[key]) || !(s[key] as unknown[]).every((x) => {
+      if (!record(x) || typeof x.id !== 'string' || !x.id || seen.has(x.id) || !validate(x)) return false;
+      seen.add(x.id); return true;
+    })) return false;
+  }
+  if (s.settings !== undefined) {
+    if (!record(s.settings)) return false;
+    for (const [key, value] of Object.entries(s.settings)) {
+      if (key === 'favorites' ? !strings(value) : key in DEFAULT_SETTINGS && typeof value !== typeof DEFAULT_SETTINGS[key as keyof AppSettings]) return false;
+    }
+    if (s.settings.aiProvider !== undefined && !['local', 'api'].includes(String(s.settings.aiProvider))) return false;
+  }
+  return true;
+}
+type CategoryData = { id: string; parentId: string | null };
 
 /** v2 → v3: hängt fehlende 1Clicker-Infos an (idempotent — bestehende bleiben). */
 function upgradeClicker(bm: Bookmark, oldVersion: number): Bookmark {
@@ -94,23 +164,18 @@ function cleanBookmarkTags(bm: Bookmark): Bookmark {
 }
 
 function readLocal(): AppState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = migrateState(JSON.parse(raw));
-      if (parsed) return parsed;
-    }
-    return createSeedState();
-  } catch {
-    return createSeedState();
-  }
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return createSeedState();
+  const parsed = migrateState(JSON.parse(raw));
+  if (!parsed) throw new Error('Gespeicherte Daten sind ungültig. Der vorhandene Bestand wurde nicht überschrieben.');
+  return parsed;
 }
 
 /** Lädt den Zustand asynchron (Extension: chrome.storage; sonst localStorage). */
 export async function loadStateAsync(): Promise<AppState> {
   if (chromeApi?.storage?.local) {
-    try {
       const bag = await chromeApi.storage.local.get(STORAGE_KEY);
+      if (bag[STORAGE_KEY] === undefined) return createSeedState();
       const parsed = migrateState(bag[STORAGE_KEY]);
       if (parsed) {
         try {
@@ -120,29 +185,19 @@ export async function loadStateAsync(): Promise<AppState> {
         }
         return parsed;
       }
-      return createSeedState();
-    } catch {
-      return readLocal();
-    }
+      throw new Error('Gespeicherte Add-on-Daten sind ungültig. Bitte eine gültige JSON-Sicherung importieren.');
   }
   return readLocal();
 }
 
 /** Speichert synchron (Web: localStorage; Extension: chrome.storage + lokaler Cache). */
-export function saveStateSync(state: AppState): boolean {
-  if (typeof localStorage !== 'undefined') {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (err) {
-      console.error('Speichern fehlgeschlagen', err);
-    }
-  }
+export async function saveState(state: AppState): Promise<void> {
+  if (!migrateState(state)) throw new Error('Ungültiger Zustand wurde nicht gespeichert.');
   if (chromeApi?.storage?.local) {
-    void chromeApi.storage.local.set({ [STORAGE_KEY]: state }).catch((err: unknown) =>
-      console.error('chrome.storage schreiben fehlgeschlagen', err)
-    );
+    await chromeApi.storage.local.set({ [STORAGE_KEY]: state });
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
-  return true;
 }
 
 /** Abonniert externe Änderungen (Extension: chrome.storage.onChanged; Web: storage-Event anderer Tabs). */
@@ -171,34 +226,26 @@ export function subscribeChanges(cb: (state: AppState) => void): () => void {
   return () => window.removeEventListener('storage', onStorage);
 }
 
-export function clearState(): void {
-  if (typeof localStorage !== 'undefined') {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignorieren */
-    }
-  }
-  if (chromeApi?.storage?.local) {
-    void chromeApi.storage.local.remove(STORAGE_KEY).catch(() => undefined);
-  }
-}
-
 // ── KI-API-Schlüssel (separat vom Zustand, nie im Export) ──────────────────
 
-export function getAiApiKey(): string {
-  try {
-    return localStorage.getItem(AI_KEY_STORAGE) ?? '';
-  } catch {
-    return '';
+export async function getAiApiKey(): Promise<string> {
+  if (chromeApi?.storage?.local) {
+    const bag = await chromeApi.storage.local.get(AI_KEY_STORAGE);
+    if (typeof bag[AI_KEY_STORAGE] === 'string') return bag[AI_KEY_STORAGE];
+    // Alte Add-on-Versionen speicherten den Schlüssel nur im Manager-Fenster.
+    const old = typeof localStorage !== 'undefined' ? localStorage.getItem(AI_KEY_STORAGE) : null;
+    if (old) await chromeApi.storage.local.set({ [AI_KEY_STORAGE]: old });
+    return old ?? '';
   }
+  return localStorage.getItem(AI_KEY_STORAGE) ?? '';
 }
 
-export function setAiApiKey(key: string): void {
-  try {
+export async function setAiApiKey(key: string): Promise<void> {
+  if (chromeApi?.storage?.local) {
+    if (key) await chromeApi.storage.local.set({ [AI_KEY_STORAGE]: key });
+    else await chromeApi.storage.local.remove(AI_KEY_STORAGE);
+  } else {
     if (key) localStorage.setItem(AI_KEY_STORAGE, key);
     else localStorage.removeItem(AI_KEY_STORAGE);
-  } catch {
-    /* ignorieren */
   }
 }

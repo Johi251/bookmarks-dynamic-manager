@@ -8,7 +8,8 @@ export type IconName =
   | 'minimize' | 'maximize' | 'x' | 'check' | 'chevronRight' | 'chevronDown'
   | 'star' | 'command' | 'hash' | 'external' | 'folder' | 'refresh' | 'alert'
   | 'clock' | 'github' | 'bot' | 'help' | 'target' | 'arrowRight' | 'minus'
-  | 'zap' | 'monitor' | 'camera' | 'film' | 'download' | 'shield' | 'terminal';
+  | 'zap' | 'monitor' | 'camera' | 'film' | 'download' | 'shield' | 'terminal'
+  | 'history' | 'chart' | 'selectAll' | 'copy';
 
 const PATHS: Record<IconName, string> = {
   bookmark: 'M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z',
@@ -53,6 +54,10 @@ const PATHS: Record<IconName, string> = {
   download: 'M12 4v11m0 0 4-4m-4 4-4-4M5 19h14',
   shield: 'M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Zm-2.5 9 2 2 4-4.5',
   terminal: 'M5 6h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm3 4 2.5 2.5L8 15m5 0h4',
+  history: 'M3.5 12a8.5 8.5 0 1 0 2.5-6M4 3v4h4m4-1v5l3.5 2',
+  chart: 'M4 20h16M7 16V9m5 7V5m5 11v-5',
+  selectAll: 'M4 6h2M4 12h2M4 18h2M10 6h2M10 12h2M10 18h2m4-12h2M16 12h2M16 18h2M20 6v12',
+  copy: 'M9 9h10v12H9V9Zm3-3h10v12M5 3h10v3',
 };
 
 interface Props {

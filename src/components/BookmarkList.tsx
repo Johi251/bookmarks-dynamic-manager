@@ -19,6 +19,8 @@ interface Props {
   /** 1Clicker: 🔵 Badge-Klick → Dialog für lokale Bereitstellung. */
   onDeploy: (bookmarkId: string) => void;
   compact?: boolean;
+  checked?: Set<string>;
+  onCheck?: (id: string) => void;
 }
 
 function formatDate(ms: number): string {
@@ -45,6 +47,7 @@ export default function BookmarkList({
   onSelectCategory,
   onDeploy,
   compact = false,
+  checked, onCheck,
 }: Props) {
   const catById = new Map(api.state.categories.map((c) => [c.id, c]));
 
@@ -85,6 +88,7 @@ export default function BookmarkList({
         {bookmarks.map((bm, i) => (
           <BmRow
             key={bm.id}
+            checked={checked?.has(bm.id)} onCheck={onCheck}
             bm={bm}
             index={i}
             catById={catById}
@@ -106,6 +110,7 @@ export default function BookmarkList({
             {crossLinked.map(({ bookmark: bm, via }, i) => (
               <BmRow
                 key={`x-${bm.id}`}
+                checked={checked?.has(bm.id)} onCheck={onCheck}
                 bm={bm}
                 index={i}
                 catById={catById}
@@ -135,7 +140,7 @@ function BmRow({
   onSelectCategory,
   onDeploy,
   compact,
-  viaTerms,
+  viaTerms, checked, onCheck,
 }: {
   bm: Bookmark;
   index: number;
@@ -147,6 +152,8 @@ function BmRow({
   onDeploy: (bookmarkId: string) => void;
   compact: boolean;
   viaTerms?: string[];
+  checked?: boolean;
+  onCheck?: (id: string) => void;
 }) {
   const host = hostOf(bm.url);
   const isLinked = Boolean(viaTerms);
@@ -161,19 +168,20 @@ function BmRow({
       }}
       title="Ziehen, um den Link einer Kategorie zuzuordnen"
     >
+      {checked !== undefined && <input type="checkbox" aria-label={`${bm.title} auswählen`} checked={checked} onChange={() => onCheck?.(bm.id)} />}
       {!compact && (
         <Favicon url={bm.url} title={bm.title} enabled={api.state.settings.faviconsEnabled} />
       )}
       <div className="bm-body">
         <div className="bm-title-row">
-          <a className="bm-title" href={bm.url} target="_blank" rel="noreferrer noopener">
+          <a className="bm-title" onClick={() => api.markOpened(bm.id)} href={bm.url} target="_blank" rel="noreferrer noopener">
             {bm.title}
           </a>
           {bm.clicker && (
             <ClickerBadge
               bookmarkId={bm.id}
               clicker={bm.clicker}
-              onOnline={(u) => window.open(u, '_blank', 'noopener')}
+              onOnline={(u) => { api.markOpened(bm.id); window.open(u, '_blank', 'noopener'); }}
               onLocal={onDeploy}
               compact={compact}
             />

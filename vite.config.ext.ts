@@ -19,7 +19,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: resolve(extRoot, '..', 'dist-ext'),
-    emptyOutDir: true,
+    emptyOutDir: false,
     sourcemap: false,
     target: 'es2022',
     rollupOptions: {

@@ -17,13 +17,13 @@ const LABEL: Record<string, string> = { checking: 'Checking', online: 'Online', 
  */
 export default function ClickerBadge({ bookmarkId, clicker, onOnline, onLocal, compact = false }: Props) {
   if (clicker.status === 'none') return null;
-  const label = LABEL[clicker.status] ?? clicker.status;
+  const label = (LABEL[clicker.status] ?? clicker.status) + (clicker.status !== 'checking' && !clicker.verified ? ' · Hinweis' : '');
   const tip =
     clicker.status === 'checking'
       ? '1Clicker: Repository wird im Hintergrund analysiert …'
       : clicker.status === 'online'
-        ? `1Clicker: Kostenlos online nutzbar${clicker.reason ? ` — ${clicker.reason}` : ''}. Klick öffnet die Live-Anwendung.`
-        : `1Clicker: Kostenlos lokal nutzbar${clicker.reason ? ` — ${clicker.reason}` : ''}. Klick zeigt die lokale Bereitstellung.`;
+        ? `aKlik: ${clicker.verified ? 'Online-Zugang geprüft' : 'Online-Hinweis; Funktion und Kosten ungeprüft'}${clicker.reason ? ` — ${clicker.reason}` : ''}. Klick öffnet die Webseite.`
+        : `aKlik: ${clicker.verified ? 'Lokaler Bereitstellungsweg geprüft' : 'Lokaler Hinweis; Ausführung ungeprüft'}${clicker.reason ? ` — ${clicker.reason}` : ''}. Klick öffnet die Bereitstellung.`;
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();

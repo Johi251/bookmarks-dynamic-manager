@@ -74,7 +74,7 @@ export function classifyClicker(url: string, title: string, tags: string[] = [])
       return {
         status: 'local',
         kind: sig.kind,
-        reason: sig.reason,
+        reason: sig.reason, verified: false,
         repo: repo ? { owner: repo.owner, name: repo.name, cloneUrl: repo.cloneUrl } : undefined,
       };
     }
@@ -82,7 +82,7 @@ export function classifyClicker(url: string, title: string, tags: string[] = [])
 
   // 2) Gehostete Web-Anwendung → direkt online nutzbar (🟢).
   if (HOSTED_WEB_SUFFIXES.some((s) => host === s || host.endsWith(`.${s}`))) {
-    return { status: 'online', kind: 'web', launchUrl: url, reason: `Gehostete Web-App (${host})` };
+    return { status: 'online', kind: 'web', launchUrl: url, reason: `Gehostete Webseite (${host}); Kosten und Funktion ungeprüft`, verified: false };
   }
 
   // 3) Repository-Links: Nutzungsweg wird im Hintergrund verfeinert (🟠 Checking).
@@ -146,8 +146,10 @@ export async function refineRepo(
   info: ClickerInfo,
   signal: AbortSignal
 ): Promise<ClickerInfo> {
+  info = { ...info, verified: false };
   if (!info.repo) return info;
   const { owner, name } = info.repo;
+  if (new URL(info.repo.cloneUrl).hostname !== 'github.com') return { ...info, status: 'none', checkedAt: Date.now(), verified: false, reason: 'Nutzungsweg bitte über aKlik prüfen.' };
   const base = `https://api.github.com/repos/${owner}/${name}`;
   const checkedAt = Date.now();
 
@@ -165,7 +167,7 @@ export async function refineRepo(
   // 🟢 Homepage des Repos = Live-Anwendung.
   const homepage = (repo.homepage ?? '').trim();
   if (/^https?:\/\//.test(homepage)) {
-    return { ...info, status: 'online', kind: 'web', launchUrl: homepage, checkedAt, reason: 'Repository-Homepage (Live-App)' };
+    return { ...info, status: 'online', kind: 'web', launchUrl: homepage, checkedAt, verified: false, reason: 'Repository-Homepage; Funktion und Kosten nicht verifiziert' };
   }
 
   // 🟢 GitHub-Pages-Demo.
@@ -243,7 +245,7 @@ export function deploySteps(bm: Bookmark): DeployStep[] {
     case 'docker':
       return [
         { label: 'Repository klonen', command: `git clone ${repo?.cloneUrl ?? bm.url + '.git'}` },
-        { label: 'Mit Docker starten (Compose, falls vorhanden — sonst Build)', command: `cd ${repo?.name ?? 'repo'} && (docker compose up -d 2>/dev/null || docker build -t ${repo ? `${repo.owner}-${repo.name}` : 'app'} . && docker run -p 8080:80 ${repo ? `${repo.owner}-${repo.name}` : 'app'})` },
+        { label: 'Nur bei vorhandener Compose-Datei: im Projektordner ausführen; Ports und Umgebungsvariablen laut README prüfen', command: 'docker compose up -d' },
         { label: 'Repository öffnen (README/Anleitung)', link: repoUrl },
       ];
     case 'portable':

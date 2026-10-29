@@ -37,7 +37,7 @@ async function callApi(
   glossary: GlossaryEntry[],
   signal: AbortSignal
 ): Promise<SmartAnalysis[]> {
-  const key = getAiApiKey();
+  const key = await getAiApiKey();
   const endpoint = settings.aiEndpoint.replace(/\/+$/, '');
   const glossaryContext = glossary.length
     ? glossary.map((g) => `${g.term} = ${g.definition} [verwandt: ${g.related.join(', ')}]`).join('\n')
@@ -90,7 +90,7 @@ export async function analyzeBatch(
 ): Promise<AiRouteResult> {
   const local = (): SmartAnalysis[] => items.map((it) => analyzeBookmark(it.url, it.title, it.existingTags, glossary));
 
-  if (settings.aiProvider === 'api' && settings.aiEndpoint && getAiApiKey()) {
+  if (settings.aiProvider === 'api' && settings.aiEndpoint && await getAiApiKey()) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 25_000);
     try {

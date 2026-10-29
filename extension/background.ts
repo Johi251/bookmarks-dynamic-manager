@@ -1,3 +1,4 @@
+import { urlKey } from '../src/host';
 /**
  * MV3-Background (Service Worker, IIFE-gebündelt): Kontextmenü, Tastenkürzel
  * und Speichern mit derselben Kategorisierungs-Logik wie die App.
@@ -9,7 +10,7 @@
  * verschlagwortet — Tags/Kategorien landen direkt auf dem Lesezeichen.
  */
 import { addBookmarkToState, mapNamesToIds } from '../src/applyBookmark';
-import { loadStateAsync, saveStateSync } from '../src/storage';
+import { loadStateAsync, saveState } from '../src/storage';
 import { analyzeScreenshot } from '../src/ai/vision';
 import type { ClickerInfo } from '../src/types';
 import { classifyClicker } from '../src/oneclicker';
@@ -30,7 +31,8 @@ chrome.runtime.onInstalled.addListener(() => {
 
 interface SaveOutcome {
   ok: boolean;
-  reason?: 'duplicate' | 'invalid';
+  reason?: 'duplicate' | 'invalid' | 'storage';
+  error?: string;
   categories?: string[];
   visionTags?: string[];
   vision?: 'vision' | 'local' | 'off';
@@ -51,10 +53,11 @@ async function downscaleShot(dataUrl: string): Promise<string> {
     bitmap.close();
     const out = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.55 });
     return await new Promise<string>((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(String(fr.result));
-      fr.onerror = () => reject(fr.error);
-      fr.readAsDataURL(out);
+      void out.arrayBuffer().then((buffer) => {
+        let binary = '';
+        for (const byte of new Uint8Array(buffer)) binary += String.fromCharCode(byte);
+        resolve(`data:image/jpeg;base64,${btoa(binary)}`);
+      }, reject);
     });
   } catch {
     return dataUrl;
@@ -68,19 +71,19 @@ async function storeShot(bookmarkId: string, dataUrl: string): Promise<void> {
     shots[bookmarkId] = dataUrl;
     // LRU-Kappung: nur die jüngsten SHOTS_MAX Screenshots behalten.
     const ids = Object.keys(shots);
-    if (ids.length > SHOTS_MAX) {
-      const state = await loadStateAsync();
-      const order = new Map(state.bookmarks.map((b, i) => [b.id, i]));
-      ids.sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity));
-      for (const id of ids.slice(0, ids.length - SHOTS_MAX)) delete shots[id];
-    }
+    for (const id of ids.slice(0, Math.max(0, ids.length - SHOTS_MAX))) delete shots[id];
     await chrome.storage.local.set({ [SHOTS_KEY]: shots });
   } catch {
     /* Screenshots sind optional */
   }
 }
 
-async function saveCurrentTab(): Promise<SaveOutcome> {
+let saves = Promise.resolve<SaveOutcome>({ ok: true });
+function saveCurrentTab(): Promise<SaveOutcome> {
+  saves = saves.catch(() => ({ ok: false })).then(saveTab).catch(() => ({ ok: false, reason: 'storage', error: 'Speichern fehlgeschlagen. Bitte den Manager und den verfügbaren Speicher prüfen.' }));
+  return saves;
+}
+async function saveTab(): Promise<SaveOutcome> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const url = tab?.url ?? '';
   const title = tab?.title ?? '';
@@ -100,6 +103,7 @@ async function saveCurrentTab(): Promise<SaveOutcome> {
     bookmark = { ...bookmark, clicker: info };
     nextState = { ...nextState, bookmarks: nextState.bookmarks.map((b) => (b.id === bookmark.id ? bookmark : b)) };
   }
+  await saveState(nextState);
 
   // Vision: Screenshot ziehen + verschlagworten (optional, fehlertolerant).
   let vision: SaveOutcome['vision'] = 'off';
@@ -120,12 +124,16 @@ async function saveCurrentTab(): Promise<SaveOutcome> {
         if (res.tags.length > 0) {
           visionTags = res.tags;
           const merged = [...new Set([...bookmark.tags, ...res.tags])];
-          const { state: s2, ids } = mapNamesToIds(res.categories, nextState);
-          bookmark = { ...bookmark, tags: merged, categoryIds: [...new Set([...bookmark.categoryIds, ...ids])] };
+          const current = await loadStateAsync();
+          const existing = current.bookmarks.find((b) => b.id === bookmark.id);
+          if (!existing) return { ok: true, vision };
+          const { state: s2, ids } = mapNamesToIds(res.categories, current);
+          bookmark = { ...existing, tags: [...new Set([...existing.tags, ...merged])], categoryIds: [...new Set([...existing.categoryIds, ...ids])] };
           nextState = {
             ...s2,
             bookmarks: s2.bookmarks.map((b) => (b.id === bookmark.id ? bookmark : b)),
           };
+          await saveState(nextState);
         }
       }
     } catch {
@@ -133,7 +141,6 @@ async function saveCurrentTab(): Promise<SaveOutcome> {
     }
   }
 
-  saveStateSync(nextState);
   const names = bookmark.categoryIds
     .map((id) => nextState.categories.find((c) => c.id === id)?.name ?? '')
     .filter(Boolean);
@@ -164,7 +171,7 @@ chrome.runtime.onMessage.addListener((msg: { type: string }, _sender, sendRespon
           return;
         }
         const state = await loadStateAsync();
-        const saved = state.bookmarks.some((b) => b.url.toLowerCase().replace(/\/$/, '') === url.toLowerCase().replace(/\/$/, ''));
+        const saved = state.bookmarks.some((b) => urlKey(b.url) === urlKey(url));
         sendResponse({ url, title: tab?.title, saved });
         return;
       }
@@ -184,6 +191,6 @@ chrome.runtime.onMessage.addListener((msg: { type: string }, _sender, sendRespon
       default:
         sendResponse(null);
     }
-  })();
+  })().catch(() => sendResponse({ ok: false, error: 'Daten konnten nicht geladen werden.' }));
   return true; // Antwort asynchron
 });

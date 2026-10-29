@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Bookmark } from '../types';
 import type { BookmarksApi } from '../hooks/useBookmarks';
 import Icon from './Icon';
+import { isWebUrl } from '../storage';
 
 interface Props {
   api: BookmarksApi;
@@ -12,6 +13,7 @@ interface Props {
 /** Dialog zum Hinzufügen und Bearbeiten; zeigt Live-Auto-Kategorisierung + KI-Tag-Vorschläge. */
 export default function AddDialog({ api, bookmark, onClose }: Props) {
   const [title, setTitle] = useState(bookmark?.title ?? '');
+  const [error, setError] = useState('');
   const [url, setUrl] = useState(bookmark?.url ?? '');
   const [tags, setTags] = useState(bookmark?.tags.join(', ') ?? '');
   const [note, setNote] = useState(bookmark?.note ?? '');
@@ -44,6 +46,10 @@ export default function AddDialog({ api, bookmark, onClose }: Props) {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) return;
+    const normalizedUrl = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
+    if (!isWebUrl(normalizedUrl) || (/^[a-z][a-z\d+.-]*:\/\//i.test(url) && !/^https?:\/\//i.test(url))) {
+      setError('Bitte eine gültige HTTP-/HTTPS-Adresse ohne Zugangsdaten eingeben.'); return;
+    }
     const tagList = [
       ...tags
         .split(',')
@@ -57,9 +63,9 @@ export default function AddDialog({ api, bookmark, onClose }: Props) {
       if (!catIds.includes(cat.id)) catIds.push(cat.id);
     }
     if (bookmark) {
-      api.updateBookmark(bookmark.id, { title: title.trim() || url, url, tags: [...new Set(tagList)], pinned, note: note.trim() || undefined, categoryIds: catIds });
+      api.updateBookmark(bookmark.id, { title: title.trim() || normalizedUrl, url: normalizedUrl, tags: [...new Set(tagList)], pinned, note: note.trim() || undefined, categoryIds: catIds });
     } else {
-      api.addBookmark({ title: title.trim() || url, url: url.trim(), tags: [...new Set(tagList)], categoryIds: catIds, pinned, note: note.trim() || undefined });
+      api.addBookmark({ title: title.trim() || normalizedUrl, url: normalizedUrl, tags: [...new Set(tagList)], categoryIds: catIds, pinned, note: note.trim() || undefined });
     }
     onClose();
   };
@@ -68,6 +74,7 @@ export default function AddDialog({ api, bookmark, onClose }: Props) {
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <form className="modal" onSubmit={submit} aria-label="Lesezeichen bearbeiten">
         <h2>{bookmark ? 'Lesezeichen bearbeiten' : 'Lesezeichen hinzufügen'}</h2>
+        {error && <p role="alert">{error}</p>}
         <label>
           URL *
           <input

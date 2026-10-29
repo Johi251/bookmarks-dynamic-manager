@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { BookmarksApi } from '../hooks/useBookmarks';
 import { deploySteps } from '../oneclicker';
 import Icon from './Icon';
+import { aklikUrl } from '../integrations';
 
 interface Props {
   api: BookmarksApi;
@@ -31,7 +32,7 @@ export default function ClickerDialog({ api, bookmarkId, onClose, notify }: Prop
   const info = bm.clicker;
   if (!info) return null;
   const steps = deploySteps(bm);
-  const repoUrl = info.repo ? `https://github.com/${info.repo.owner}/${info.repo.name}` : bm.url;
+  const repoUrl = info.repo ? info.repo.cloneUrl.replace(/\.git$/, '') : bm.url;
 
   const copy = async (text: string, label: string) => {
     try {
@@ -57,9 +58,10 @@ export default function ClickerDialog({ api, bookmarkId, onClose, notify }: Prop
         </h2>
         <p className="hint">
           Nutzungsweg <strong>{kindLabel}</strong>
-          {info.reason ? ` — ${info.reason}` : ''}. Die Schritte unten führen in einem Zug zur laufenden
-          lokalen Instanz (kostenlos, auf dem eigenen Gerät).
+          {info.reason ? ` — ${info.reason}` : ''}. Die Anleitung ist ein Hinweis; Ausführung und Kosten müssen vor dem Start geprüft werden.
         </p>
+        <a className="btn primary" href={aklikUrl(repoUrl)} target="_blank" rel="noreferrer noopener">In aKlik lokal prüfen und bereitstellen</a>
+        <p className="hint">Öffnet den laufenden lokalen aKlik-Deployer auf Port 43110. Dort werden die Bereitstellung geprüft und der Start bestätigt.</p>
 
         <ol className="deploy-steps">
           {steps.map((step, i) => (

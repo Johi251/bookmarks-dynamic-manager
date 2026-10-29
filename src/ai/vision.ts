@@ -43,7 +43,7 @@ export async function analyzeScreenshot(
 
   const endpoint = settings.aiEndpoint.trim().replace(/\/+$/, '');
   const model = (settings.visionModel || 'glm-5.3-flash').trim();
-  const key = getAiApiKey();
+  const key = await getAiApiKey();
   if (settings.aiProvider !== 'api' || !endpoint || !key || !imageDataUrl.startsWith('data:image/')) {
     return local();
   }

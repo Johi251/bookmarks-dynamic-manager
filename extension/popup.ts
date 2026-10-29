@@ -6,7 +6,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 interface SaveResponse {
   ok: boolean;
-  reason?: 'duplicate' | 'invalid';
+  reason?: 'duplicate' | 'invalid' | 'storage';
   categories?: string[];
 }
 
@@ -50,7 +50,8 @@ $('save').addEventListener('click', async () => {
   const save = $('save') as HTMLButtonElement;
   save.disabled = true;
   save.textContent = '⏳ Speichere …';
-  const res = await send<SaveResponse>('BDM_SAVE_CURRENT');
+  let res: SaveResponse;
+  try { res = await send<SaveResponse>('BDM_SAVE_CURRENT'); } catch { res = {ok:false, reason:'storage'}; }
   const out = $('result');
   const cats = $('cats');
   cats.innerHTML = '';
@@ -63,6 +64,9 @@ $('save').addEventListener('click', async () => {
       cats.appendChild(chip);
     }
     save.textContent = '✓ Gespeichert';
+  } else if (res.reason === 'storage') {
+    out.textContent = 'Nicht gespeichert: Speicherfehler. Bitte den Manager öffnen.';
+    save.textContent = 'Erneut versuchen'; save.disabled = false;
   } else if (res.reason === 'duplicate') {
     out.innerHTML = '<div class="msg warn">⚠️ Dieser Link ist bereits gespeichert.</div>';
     save.textContent = '✓ Bereits gespeichert';
@@ -78,4 +82,4 @@ $('openManager').addEventListener('click', async (e) => {
   await chrome.tabs.create({ url: chrome.runtime.getURL('manager.html') });
 });
 
-void refresh();
+void refresh().catch(() => { $('pageTitle').textContent = 'Manager öffnen: Daten konnten nicht geladen werden.'; });

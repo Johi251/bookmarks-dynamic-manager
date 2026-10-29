@@ -307,18 +307,19 @@ function computeCounts(state: AppState): { perCat: Map<string, number>; smart: R
   const weekStart = Date.now() - 7 * 86_400_000;
   const catById = new Map(state.categories.map((c) => [c.id, c]));
   const perCat = new Map<string, number>();
-  const smart: Record<SmartViewKey, number> = { today: 0, week: 0, github: 0, ki: 0, pinned: 0, uncategorized: 0, 'clicker-online': 0, 'clicker-local': 0 };
-
-  const childrenOf = new Map<string, string[]>();
-  for (const c of state.categories) {
-    if (c.parentId) childrenOf.set(c.parentId, [...(childrenOf.get(c.parentId) ?? []), c.id]);
-  }
-  const deepIds = (id: string): string[] => [id, ...(childrenOf.get(id) ?? []).flatMap(deepIds)];
+  const smart: Record<SmartViewKey, number> = { hunt: 0, today: 0, week: 0, recent: 0, github: 0, ki: 0, pinned: 0, uncategorized: 0, 'clicker-online': 0, 'clicker-local': 0 };
 
   for (const bm of state.bookmarks) {
+    const ancestors = new Set<string>();
     for (const id of bm.categoryIds) {
-      for (const hit of deepIds(id)) perCat.set(hit, (perCat.get(hit) ?? 0) + 1);
+      let current: string | null = id;
+      while (current && !ancestors.has(current)) {
+        ancestors.add(current); current = catById.get(current)?.parentId ?? null;
+      }
     }
+    for (const id of ancestors) perCat.set(id, (perCat.get(id) ?? 0) + 1);
+    if (bm.lastOpenedAt) smart.recent++;
+    if (bm.source === 'copyNpaste' && (bm.capturedAt ?? 0) >= dayStart.getTime()) smart.hunt++;
     if (bm.added >= dayStart.getTime()) smart.today++;
     if (bm.added >= weekStart) smart.week++;
     if (/github\.com$/i.test(hostOf(bm.url))) smart.github++;

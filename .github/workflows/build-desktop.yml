@@ -1,0 +1,38 @@
+name: Desktop-Pakete und Tests
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, macos-15-intel, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+      - uses: dtolnay/rust-toolchain@stable
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+      - run: bun run build:ext
+      - if: runner.os == 'Windows'
+        run: bunx tauri build --bundles nsis
+      - if: runner.os != 'Windows'
+        run: bunx tauri build
+      # Direkte Release-Downloads vermeiden abrechenbaren Actions-Artefaktspeicher.
+      - run: node scripts/upload-native.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: v1.4.0

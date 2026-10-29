@@ -1,6 +1,9 @@
 /** Minimale Chrome-/WebExtension-Typen (nur die genutzten APIs) für den Add-on-Build. */
 
 declare namespace chrome {
+  namespace permissions {
+    function request(permissions: { origins: string[] }): Promise<boolean>;
+  }
   namespace runtime {
     function getURL(path: string): string;
     const onInstalled: {

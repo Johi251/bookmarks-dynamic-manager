@@ -2,10 +2,11 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Bookmarks Dynamic Manager",
   "mainBinaryName": "BookmarksDynamicManager",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "identifier": "io.github.johi251.bookmarks-dynamic-manager",
   "build": {
-    "frontendDist": "../dist-desktop"
+    "frontendDist": "../dist-desktop",
+    "beforeBuildCommand": "bun run build:desktop"
   },
   "app": {
     "windows": [
@@ -19,16 +20,24 @@
       }
     ],
     "security": {
-      "csp": null
-    }
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost https: http://127.0.0.1:* http://localhost:*; worker-src 'self' blob:; media-src 'self' blob: data:"
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "targets": "all",
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
     "windows": {
       "nsis": {
-        "languages": ["German", "English"],
+        "languages": [
+          "German",
+          "English"
+        ],
         "displayLanguageSelector": false
       }
     }
