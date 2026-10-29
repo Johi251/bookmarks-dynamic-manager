@@ -42,4 +42,4 @@ Beide Remotion-Templates sind im Video-Studio verfügbar. Für MP4 die Requisite
 
 ## Prüfung und Grenzen
 
-Der aktuelle Prüfstatus steht im Gesamtpaket unter `Quellcode/PRUEFSTATUS-1.4.0.md`. Windows-Statistik und Schnellwahl sind visuell bestätigt. Das Chromium-ZIP ist in einem echten isolierten Browser geprüft; Firefox wurde temporär installiert. Vollständige Fensterabnahme, der tatsächliche Clipboard-Shortcut in copyNpaste und eine eigene Vision-API bleiben separate Prüfungen. Die Testläufe verwenden synthetische Links und keine privaten Lesezeichen.
+Der aktuelle Prüfstatus steht im Gesamtpaket unter `Quellcode/PRUEFSTATUS-1.4.0.md`. Windows-Statistik und Schnellwahl sind visuell bestätigt. Der tatsächliche Weg Strg+C → copyNpaste → Today's Hunt funktioniert mit der finalen Windows-Ausgabe. Das Chromium-ZIP ist in einem echten isolierten Browser geprüft; Firefox wurde temporär installiert. Die öffentliche Web-App startet nach Cache-Aufbau auch offline. Vollständige Fensterabnahme auf jedem System und eine eigene Vision-API bleiben separate Prüfungen. Die Testläufe verwenden eigene Testlinks.

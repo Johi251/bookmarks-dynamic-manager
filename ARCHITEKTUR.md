@@ -45,4 +45,4 @@ Der manuelle Workflow hat Windows x64, Mac Apple Silicon/Intel und Linux amd64 e
 - Die Web-Auslieferung auf GitHub steht auf 1.4.0. Native Programme sind auf allen vier Zielsystem-Runnern gestartet; vollständige Installer-/Fensterabnahme bleibt davon getrennt.
 - Kein Cloud-Sync zwischen den lokalen Beständen.
 - Keine kostenlose oder kompatible KI-API ohne konkrete Providerprüfung zugesichert.
-- Chromium-Add-on mit echten Browser-APIs geprüft; Firefox temporär installiert. Vollständige Firefox-Fensterbedienung und copyNpaste-Clipboard-Shortcut noch nicht praktisch abgenommen.
+- Chromium-Add-on mit echten Browser-APIs geprüft; Firefox temporär installiert. Strg+C → copyNpaste → Today's Hunt mit finaler Windows-App bestätigt. Vollständige Firefox-Fensterbedienung bleibt separat offen.

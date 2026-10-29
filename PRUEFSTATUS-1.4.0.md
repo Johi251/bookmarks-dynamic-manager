@@ -12,6 +12,8 @@ executed: Version 1.4.0 ist repariert und auf GitHub veröffentlicht; die Web-Ap
 - live verified: Windows-Statistik, orange Oberfläche und sechs Schnellaktionen zusätzlich über die echte native Fensteroberfläche geprüft.
 - live verified: Die reale lokale aKlik-Bridge 1.1.0 wurde angesprochen. Der Adapter behandelt das Ergebnis needs_review korrekt als unbestätigt. Keine falsche grüne Verfügbarkeitszusage.
 - live verified: Der native Empfänger auf Port 9911 nahm einen gültigen copyNpaste-Protokollaufruf an. Die Warteschlange wechselte nach erfolgreicher Speicherung von einem Eintrag auf null.
+- live verified: Der tatsächliche Clipboard-Weg wurde anschließend mit der finalen Windows-Ausgabe geprüft: eigener Testlink im Suchfeld, Strg+C, automatische Übergabe durch das laufende copyNpaste und sichtbarer Eintrag in Today's Hunt. Nach der Quittierung ist der Eingang leer. Der nur für diesen Test gestartete copyNpaste-Prozess wurde beendet.
+- live verified: Die öffentliche Web-App 1.4.0 wurde zusätzlich in echtem Chromium geladen, auf Statistik geprüft und nach Cache-Aufbau erfolgreich offline neu geladen.
 - executed: Beide Videoformate wurden bereits als echte MP4s gerendert und mit ffprobe geprüft: H.264, 232 Frames, Quer- und Hochformat.
 
 ## Öffentliche Belege
@@ -21,6 +23,7 @@ executed: Version 1.4.0 ist repariert und auf GitHub veröffentlicht; die Web-Ap
 - Downloads: https://github.com/Johi251/bookmarks-dynamic-manager/releases/tag/v1.4.0
 - Native Tests und Builds: https://github.com/Johi251/bookmarks-dynamic-manager/actions/runs/40799265080
 - Echter Chromium-Test: https://github.com/Johi251/bookmarks-dynamic-manager/actions/runs/40800413845
+- Öffentliche Web-App einschließlich Offline-Start und erneuter Chromium-Test: https://github.com/Johi251/bookmarks-dynamic-manager/actions/runs/40801519663
 - Temporäre Firefox-Installation: https://github.com/Johi251/bookmarks-dynamic-manager/actions/runs/40800920328
 
 executed: Native Programme stammen aus dem geprüften Laufzeitstand 4c14298. Spätere Änderungen betreffen Testwerkzeuge, Dokumentation, Paketierung und die Firefox-Mindestversion. Der native Laufzeitcode bleibt identisch; bitgenaue Reproduzierbarkeit wird nicht behauptet.
@@ -49,6 +52,6 @@ executed: Persönliche Bestände, Zugangsschlüsseldateien, Entwicklungsabhängi
 - executed: Windows ist unsigniert, Mac nicht notarisiert, Firefox temporär installierbar. Die Veröffentlichung in Browser-Stores und Signaturen sind nicht enthalten.
 - not verified: Die CI-Starttests starten die nativen Programme direkt. Sie prüfen keine Installer-Dialoge, Gatekeeper-Abfragen oder vollständige manuelle Fensterbedienung auf jedem Betriebssystem.
 - not verified: Firefox-WebDriver untersagt Navigation in den geschützten moz-extension-Kontext. Die temporäre Installation ist bestätigt; die vollständige Firefox-Fensterbedienung ist nicht abgenommen.
-- not verified: Der gesamte tatsächliche copyNpaste-Clipboard-/Shortcut-Ablauf konnte wegen gleichzeitiger Eingaben am Rechner nicht abgeschlossen werden. Das reale Empfangs-/Speicher-/Quittierungsprotokoll ist geprüft.
+- not verified: Der Reverse-Paste-Shortcut und andere eigenständige Funktionen des copyNpaste-Projekts gehören nicht zur Abnahme dieses Managers. Der tatsächliche Weg Strg+C → copyNpaste → Today's Hunt ist bestätigt.
 - not verified: Keine echte externe Vision-API wurde aufgerufen. Sie bleibt optional und muss mit bewusst gewähltem Provider und dessen Kostenbedingungen geprüft werden.
 - executed: Web-App, Desktop und Add-on haben getrennte lokale Bestände; keine automatische Cloud-Synchronisierung.
