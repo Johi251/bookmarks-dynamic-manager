@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
+const {version}=JSON.parse(readFileSync('package.json','utf8'));
 const driver = spawn('geckodriver', ['--host','127.0.0.1','--port','4444'], {stdio:['ignore','pipe','pipe']});
 let log = '', session;
 for (const stream of [driver.stdout,driver.stderr]) stream.on('data',(chunk)=>{log=(log+chunk).slice(-4000);});
@@ -22,7 +23,7 @@ try {
   const id='bookmarks-dynamic-manager@johi251.github.io';
   const created = await call('/session',{capabilities:{alwaysMatch:{browserName:'firefox','moz:firefoxOptions':{args:['-headless']}}}});
   session=created.sessionId;
-  const installed=await call(`/session/${session}/moz/addon/install`,{addon:readFileSync('releases/v1.4.0/bookmarks-dynamic-manager-firefox.zip').toString('base64'),temporary:true});
+  const installed=await call(`/session/${session}/moz/addon/install`,{addon:readFileSync(`releases/v${version}/bookmarks-dynamic-manager-firefox.zip`).toString('base64'),temporary:true});
   assert.equal(installed,id);
   // WebDriver untersagt Navigation zu moz-extension; keine Browser-Schutzregel umgehen.
   console.log(`PASS: Firefox ${created.capabilities.browserVersion} installiert das echte ZIP temporär mit der erwarteten Add-on-ID. Fensterbedienung bleibt separat zu prüfen.`);

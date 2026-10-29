@@ -1,6 +1,10 @@
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { verifyImport } from './verify-import.mjs';
+
+const {version}=JSON.parse(readFileSync('package.json','utf8'));
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fixtureTitle = 'Synthetischer Add-on-Test';
@@ -14,7 +18,7 @@ try {
   let [worker] = context.serviceWorkers();
   worker ||= await context.waitForEvent('serviceworker');
   const id = worker.url().split('/')[2];
-  assert.equal(await worker.evaluate(() => chrome.runtime.getManifest().version), '1.4.0');
+  assert.equal(await worker.evaluate(() => chrome.runtime.getManifest().version), version);
   const manager = await context.newPage();
   const errors = [];
   manager.on('pageerror', (error) => errors.push(error.message));
@@ -29,6 +33,7 @@ try {
   assert.equal(duplicate.reason, 'duplicate');
   await manager.reload();
   await manager.getByText(fixtureTitle, {exact:true}).first().waitFor();
+  await verifyImport(manager);
   await manager.getByRole('tab', {name:'Statistik',exact:true}).click();
   await manager.getByRole('region', {name:'Statistik',exact:true}).waitFor();
   await manager.getByRole('button', {name:'Schnellwahl',exact:true}).click();
@@ -44,7 +49,8 @@ try {
   const publicPage = await context.newPage();
   await publicPage.goto('https://johi251.github.io/bookmarks-dynamic-manager/');
   await publicPage.getByRole('tab', {name:'Statistik',exact:true}).waitFor();
-  assert.ok((await publicPage.locator('body').innerText()).includes('v1.4.0'));
+  assert.ok((await publicPage.locator('body').innerText()).includes(`v${version}`));
+  await verifyImport(publicPage);
   await publicPage.waitForFunction(() => !!navigator.serviceWorker.controller);
   await publicPage.reload();
   await publicPage.getByRole('tab', {name:'Statistik',exact:true}).click();
@@ -54,7 +60,7 @@ try {
   try {
     await publicPage.reload();
     await publicPage.getByRole('tab', {name:'Statistik',exact:true}).waitFor();
-    console.log('PASS: Öffentliche Web-App 1.4.0 lädt, zeigt Statistik und startet nach Cache-Aufbau auch offline.');
+    console.log(`PASS: Öffentliche Web-App ${version} lädt, importiert Dateien, zeigt Statistik und startet nach Cache-Aufbau auch offline.`);
   } finally { await context.setOffline(false); }
 } finally {
   await context?.close();

@@ -125,18 +125,35 @@ export default function ImportDialog({ api, onClose, onLearnGlossary, notify }: 
           </label>
         )}
         {mode && (
-          <div
+          <>
+          <input
+            ref={inputRef}
+            type="file"
+            hidden
+            accept={mode === 'html' ? '.html,.htm,text/html' : '.json,application/json'}
+            aria-label="Importdatei"
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              e.currentTarget.value = '';
+              if (file) void handleFile(file);
+            }}
+          />
+          <button
+            type="button"
             className="dropzone"
+            aria-label={mode === 'html' ? 'Lesezeichen-HTML auswählen' : 'JSON-Sicherung auswählen'}
+            disabled={busy}
             onClick={() => inputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
               const f = e.dataTransfer.files[0];
-              if (f) void handleFile(f);
+              if (f && !busy) void handleFile(f);
             }}
           >
             {mode === 'html' ? 'Lesezeichen-HTML hierher ziehen oder klicken' : 'JSON-Backup hierher ziehen oder klicken'}
-          </div>
+          </button>
+          </>
         )}
         {busy && <p className="busy-row"><span className="spinner" /> Verarbeite — KI-Strukturierung läuft …</p>}
         {result && <p className="import-result">{result}</p>}

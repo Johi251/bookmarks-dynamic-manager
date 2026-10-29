@@ -1209,6 +1209,10 @@ kbd.inline {
 }
 
 .dropzone {
+  display: block;
+  width: 100%;
+  font: inherit;
+  background: transparent;
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius);
   padding: 30px;

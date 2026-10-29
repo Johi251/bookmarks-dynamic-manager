@@ -35,9 +35,14 @@ jobs:
         run: node scripts/smoke-native.mjs
       - if: runner.os == 'Linux'
         run: dbus-run-session -- xvfb-run -a node scripts/smoke-native.mjs
+      - if: runner.os == 'Windows'
+        name: Windows-Import im echten WebView2 prüfen
+        run: |
+          New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/bdm-browser-runtime" -Force | Out-Null
+          bun add --cwd "$env:RUNNER_TEMP/bdm-browser-runtime" --exact playwright@1.64.1
+          node scripts/verify-native-import.mjs
       # Direkte Release-Downloads vermeiden abrechenbaren Actions-Artefaktspeicher.
       - run: node scripts/upload-native.mjs
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: v1.4.0

@@ -50,3 +50,33 @@ test('Oberfläche: Statistik, sechs Schnellzugriffe und Mehrfachauswahl sind err
     expect(JSON.parse(data.get('bdm-state-v1')!).bookmarks.every((b:any)=>!b.pinned)).toBe(true);
   } finally { await act(async()=>{root.unmount();}); }
 });
+
+test('HTML-Dateiauswahl und Drop führen über den Importdialog in den gespeicherten Bestand', async () => {
+  const {window, document} = parseHTML('<html><body><div id="root"></div></body></html>');
+  Object.assign(globalThis,{window,document,HTMLElement:window.HTMLElement,DOMParser:window.DOMParser,IS_REACT_ACT_ENVIRONMENT:true});
+  window.location = new URL('https://example.com/') as never;
+  window.matchMedia = (()=>({matches:false,addEventListener(){},removeEventListener(){}})) as never;
+  const state=createSeedState();
+  state.settings.autoBackup=false;state.settings.clickerEnabled=false;state.settings.faviconsEnabled=false;
+  const data=new Map([['bdm-state-v1',JSON.stringify(state)]]);
+  globalThis.localStorage={getItem:(key:string)=>data.get(key)??null,setItem:(key:string,value:string)=>{data.set(key,value);},removeItem:(key:string)=>{data.delete(key);}} as Storage;
+  const {default:App}=await import('../src/App');
+  const root=createRoot(document.getElementById('root')!);
+  const click=async(text:string)=>{const button=[...document.querySelectorAll('button')].find((b)=>b.textContent===text);expect(button).toBeDefined();await act(async()=>{button!.click();});};
+  const file=(name:string)=>new File([`<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p><DT><A HREF="https://example.com/${name}">${name}</A></DL>`],`${name}.html`,{type:'text/html'});
+  try {
+    await act(async()=>{root.render(<App/>);await new Promise((r)=>setTimeout(r,10));});
+    await click(' Import');
+    await click('Lesezeichen-HTML (Browser)');
+    const input=document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    Object.defineProperty(input!,'files',{configurable:true,value:[file('file-choice')]});
+    await act(async()=>{input!.dispatchEvent(new window.Event('change',{bubbles:true}));await new Promise((r)=>setTimeout(r,20));});
+    expect(JSON.parse(data.get('bdm-state-v1')!).bookmarks.some((b:any)=>b.url==='https://example.com/file-choice')).toBe(true);
+    const drop=document.querySelector('.dropzone')!;
+    const event=new window.Event('drop',{bubbles:true,cancelable:true});
+    Object.defineProperty(event,'dataTransfer',{value:{files:[file('file-drop')]}});
+    await act(async()=>{drop.dispatchEvent(event);await new Promise((r)=>setTimeout(r,20));});
+    expect(JSON.parse(data.get('bdm-state-v1')!).bookmarks.some((b:any)=>b.url==='https://example.com/file-drop')).toBe(true);
+  } finally {await act(async()=>{root.unmount();});}
+});
