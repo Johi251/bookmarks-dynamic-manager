@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "tsc --noEmit && bun scripts/test-logic.ts && bun test ./scripts/test-regressions.ts ./scripts/test-worker.ts ./scripts/test-ui.tsx",
+    "test": "tsc --noEmit && bun scripts/test-logic.ts && bun test ./scripts/test-regressions.ts ./scripts/test-worker.ts ./scripts/test-ui.tsx ./scripts/test-offline.ts",
     "preview": "vite preview",
     "build:ext": "tsc --noEmit && vite build -c vite.config.ext.ts && esbuild extension/background.ts --bundle --format=iife --outfile=dist-ext/background.js --log-level=error && node scripts/package-extension.mjs",
     "build:app": "tsc --noEmit && vite build",

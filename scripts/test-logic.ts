@@ -146,7 +146,7 @@ console.log('T6 · Shortcut (Standard Strg+F, konfigurierbar)');
   const evShift = { ctrlKey: true, shiftKey: true, altKey: false, metaKey: false, key: 'f' } as KeyboardEvent;
   check('matchesShortcut trifft Strg+F', matchesShortcut(ev, sc));
   check('matchesShortcut verwirft Strg+Shift+F', !matchesShortcut(evShift, sc));
-  check('Formatierung „Strg + F"', formatShortcut(sc).includes('Strg') && formatShortcut(sc).includes('F'));
+  check('Plattformgerechte Formatierung von Ctrl+F', /^(Strg|⌃) \+ F$/.test(formatShortcut(sc)));
 }
 
 console.log('T7 · Seed-State v3');
