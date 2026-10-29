@@ -2,7 +2,7 @@
 
 Lokale Lesezeichenverwaltung mit Mehrfachkategorien, Glossar, dynamischen Gruppen, Import/Export, Statistik und optionaler KI-Unterstützung.
 
-**Lokaler Entwicklungsstand: 1.4.0.** Bei der erneuten Prüfung am 29.10.2026 stehen der GitHub-Quellstand und die [öffentliche Web-App](https://johi251.github.io/bookmarks-dynamic-manager/) weiterhin auf 1.3.0. Die projektbezogene GitHub-Freigabe wurde am 29.10.2026 erteilt; die Aktualisierung wurde noch nicht veröffentlicht. Der aktuelle Nachweis ist in diesem Quellpaket unter `PRUEFSTATUS-1.4.0.md` enthalten.
+**Version 1.4.0.** [Web-App](https://johi251.github.io/bookmarks-dynamic-manager/) · [Downloads und Gesamtpaket](https://github.com/Johi251/bookmarks-dynamic-manager/releases/tag/v1.4.0). Der aktuelle Nachweis ist im Quellpaket unter `PRUEFSTATUS-1.4.0.md` enthalten.
 
 ## Änderungen in 1.4.0
 
@@ -15,6 +15,7 @@ Lokale Lesezeichenverwaltung mit Mehrfachkategorien, Glossar, dynamischen Gruppe
 - Today's Hunt empfängt copyNpaste-URLs in der Desktop-App über den vorhandenen lokalen Webhook. Die Eingänge werden erst nach erfolgreichem Speichern im Manager quittiert.
 - Die aKlik-Status-Bridge ist in Desktop/Add-on angebunden. Statische Erkennungen tragen ausdrücklich den Zusatz „Hinweis“. Die Bereitstellungsaktion öffnet die Prüfung im laufenden lokalen aKlik-Deployer.
 - Add-on-Pakete verwenden portable ZIP-Pfade und entfernen keine Windows-Pakete mehr. Ausgaben werden pro Version getrennt abgelegt.
+- Der Desktop lädt einen versionsgebundenen Einstieg. Alte PWA-Worker werden im Desktop entfernt, damit ein früherer WebView-Cache nicht die alte Oberfläche zeigt.
 
 ## Kernfunktionen
 
@@ -30,13 +31,14 @@ Lokale Lesezeichenverwaltung mit Mehrfachkategorien, Glossar, dynamischen Gruppe
 
 ## Ausgabeformen und Installation
 
-Der lokale Releaseordner für 1.4.0 enthält die portable Windows-EXE, einen NSIS-Installer, Chrome-/Firefox-Add-on-ZIPs und das Gesamtpaket. Siehe die mitgelieferte Übergabeanleitung.
+Der Release für 1.4.0 enthält die portable Windows-EXE, einen NSIS-Installer, Mac-DMGs für Apple Silicon und Intel, Linux-DEB/AppImage, Chrome-/Firefox-ZIPs und das Gesamtpaket. Siehe die mitgelieferte Übergabeanleitung.
 
 - **Windows:** Portable EXE starten oder Installer verwenden. WebView2 wird benötigt. Die Pakete sind nicht signiert.
 - **Chrome/Edge/Brave:** ZIP entpacken, Entwicklermodus unter `chrome://extensions`, „Entpackte Erweiterung laden“.
-- **Firefox:** ZIP entpacken und temporär über `about:debugging` laden. Eine dauerhafte Installation benötigt Mozilla-Signierung.
+- **Firefox ab 128:** ZIP entpacken und temporär über `about:debugging` laden. Eine dauerhafte Installation benötigt Mozilla-Signierung.
 - **Web:** Statische Dateien per HTTP bereitstellen. Das Gesamtpaket enthält einen Build mit relativen Pfaden; ES-Module nicht über `file://` öffnen.
-- **Mac/Linux:** Tauri-Konfiguration und manuell auslösbarer Build-Workflow sind vorbereitet. Bis ein passender Runner sie tatsächlich erzeugt und geprüft hat, werden keine nativen Mac-/Linux-Pakete als fertig bezeichnet.
+- **Mac:** Passendes DMG für Apple Silicon (`aarch64`) oder Intel (`x64`). Die App ist nicht notarisiert.
+- **Linux:** DEB für amd64 oder AppImage. Das AppImage vor dem Start ausführbar machen. Die Systemvoraussetzungen der jeweiligen Ausgabe gelten weiterhin.
 
 ## Lokale Integrationen
 
@@ -75,6 +77,8 @@ bun run package:all
 
 Bun ist der Paketmanager; der reparierte Bun-Lockfile ist maßgeblich. Der veraltete npm-Lockfile wurde in den Papierkorb verschoben.
 
-Der aktuelle Prüfstand umfasst Typprüfung, 78 ursprüngliche Logikprüfungen, 28 zusätzliche Regression-/Service-Worker-/DOM-Tests und drei Rust-Tests. Beide Videoformate wurden als MP4 gerendert. Die DOM-Prüfung bestätigt den Weg vom simulierten copyNpaste-Eingang über das Speichern bis zur Quittierung sowie Mehrfachaktionen und Undo. Sie ersetzt keine visuelle Browserabnahme.
+Der Prüfstand umfasst Typprüfung, 78 ursprüngliche Logikprüfungen, 29 zusätzliche Regression-/Worker-/DOM-Tests und drei Rust-Tests. Alle vier nativen Runner haben die echte App gestartet und einen HTTP-Testeingang nach Speicherung über native IPC quittiert. Beide Videoformate wurden als MP4 gerendert.
 
-Die native Fensterbedienung und die Installation in echten Browserprofilen sind noch nicht neu visuell abgenommen. Die verwendete Computersteuerung konnte die aktuelle Chrome-Adresse nicht sicher erkennen und beendete den Zugriff.
+Das echte Chromium-Add-on wurde aus seinem ZIP installiert und auf Speichern, Dubletten, Bestand nach Neuladen, Statistik, Schnellwahl und Popup geprüft. Firefox 158 hat sein ZIP temporär installiert; dessen vollständige Fensterbedienung wurde nicht automatisiert. Der Mozilla-Linter meldet null Fehler und drei Warnungen: fehlende Datenverarbeitungsdeklaration für eine spätere Store-Einreichung und zwei React-interne `innerHTML`-Stellen. Die Anwendung reicht keine eigenen unbereinigten Inhalte an diese React-Schnittstelle weiter.
+
+Windows-Statistik und Schnellwahl wurden zusätzlich visuell geprüft. Die nativen Starttests prüfen die Programme direkt; Installer-Dialoge, Gatekeeper und der vollständige copyNpaste-Clipboard-Shortcut-Ablauf sind nicht abgenommen. Eine echte kostenpflichtige Vision-API wurde nicht aufgerufen.

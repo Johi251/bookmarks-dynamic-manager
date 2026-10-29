@@ -38,12 +38,11 @@ Statistik, Sortierung, Mehrfachaktionen und Shortcuts sind an den zentralen Zust
 
 Die Native- und Add-on-Icons stammen aus dem orangefarbenen SVG. Paketierung verwendet ausschließlich standardisierte UTF-8-ZIP-Pfade. Der Paketierer löscht keine vorherigen Releases. Tauri-, Web- und Add-on-Versionen sind einheitlich 1.4.0.
 
-Windows wird lokal gebaut. Der manuell startbare Workflow enthält Windows-, Mac- und Linux-Builds; deren Existenz als Workflow beweist keine erfolgreiche Ausführung. Ein Gesamt-ZIP darf fehlende Mac-/Linux-Binaries nicht als fertig darstellen.
+Der manuelle Workflow hat Windows x64, Mac Apple Silicon/Intel und Linux amd64 erfolgreich gebaut. Jede gebaute App wurde gestartet; ein echter HTTP-Eingang wurde nach Speicherung über native IPC quittiert. Die nativen Pakete werden direkt als Release-Assets übertragen, ohne zusätzlichen Actions-Artefaktspeicher. Der Desktop-Einstieg `desktop-1.4.0.html` verhindert alte index.html-Antworten aus dem WebView-Cache; die Bootstrap-Logik registriert im Desktop keinen PWA-Worker.
 
 ## Aktuelle Grenzen
 
-- Die Web-Auslieferung auf GitHub ist am 29.10.2026 weiterhin 1.3.0. Die projektbezogene Freigabe liegt inzwischen vor; die Aktualisierung wurde noch nicht veröffentlicht.
-- Mac/Linux benötigen einen tatsächlich ausgeführten Zielsystem-Build und eine eigene Abnahme.
+- Die Web-Auslieferung auf GitHub steht auf 1.4.0. Native Programme sind auf allen vier Zielsystem-Runnern gestartet; vollständige Installer-/Fensterabnahme bleibt davon getrennt.
 - Kein Cloud-Sync zwischen den lokalen Beständen.
 - Keine kostenlose oder kompatible KI-API ohne konkrete Providerprüfung zugesichert.
-- Keine visuelle Browser-/native Fensterabnahme durch den blockierten Computerzugriff.
+- Chromium-Add-on mit echten Browser-APIs geprüft; Firefox temporär installiert. Vollständige Firefox-Fensterbedienung und copyNpaste-Clipboard-Shortcut noch nicht praktisch abgenommen.

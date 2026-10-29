@@ -6,7 +6,7 @@ Unter `Downloads` liegt die portable `BookmarksDynamicManager.exe` und der Windo
 
 ## Browser-Add-ons
 
-Das passende Chrome- beziehungsweise Firefox-ZIP entpacken. Chrome/Edge/Brave: Entwicklermodus unter `chrome://extensions` und „Entpackte Erweiterung laden“. Firefox: temporär über `about:debugging`. Für eine dauerhafte Firefox-Installation fehlt weiterhin die Mozilla-Signierung.
+Das passende Chrome- beziehungsweise Firefox-ZIP entpacken. Chrome/Edge/Brave: Entwicklermodus unter `chrome://extensions` und „Entpackte Erweiterung laden“. Firefox ab Version 128: temporär über `about:debugging`. Für eine dauerhafte Firefox-Installation fehlt weiterhin die Mozilla-Signierung.
 
 KI/Vision ist optional. In den Einstellungen den eigenen OpenAI-kompatiblen Endpunkt und das Modell eintragen. Das Add-on fragt Zugriff auf diesen Endpunkt an. Erst bei bewusst aktiviertem Vision-Modus werden Seitenbilder an diese API gesendet. Die Nutzungskosten des eigenen Providers sind dessen Vertragsbedingungen zu entnehmen; das Programm verspricht keine kostenlose externe KI.
 
@@ -14,11 +14,13 @@ KI/Vision ist optional. In den Einstellungen den eigenen OpenAI-kompatiblen Endp
 
 Der Ordner `Web-App` enthält den aktuellen statischen Build mit relativen Pfaden. Er muss über einen HTTP-Server bereitgestellt werden; `index.html` nicht als Datei doppelklicken. Aus dem Quellcode: `bun install --frozen-lockfile`, anschließend `bun run dev`.
 
-Die bereits veröffentlichte GitHub-Pages-Seite steht bei der Nachprüfung am 29.10.2026 weiterhin auf 1.3.0. Die GitHub-Freigabe für dieses Projekt liegt inzwischen vor; die Aktualisierung wurde noch nicht veröffentlicht.
+Die öffentliche GitHub-Pages-Seite ist auf Version 1.4.0 aktualisiert.
 
 ## Mac und Linux
 
-Native Pakete können nur auf passenden Systemen erstellt und abgenommen werden. Dieses lokale Paket enthält deshalb keine behauptete Mac-App und kein Linux-Binary. Die manuell auslösbare GitHub-Actions-Pipeline im Quellcode erstellt passende native Pakete auf Windows, Mac und Linux. Sie wurde noch nicht veröffentlicht oder ausgeführt.
+Im Ordner `Downloads` liegen DMGs für Apple Silicon (`aarch64`) und Intel (`x64`) sowie Linux-DEB und AppImage für amd64. Für Mac die passende Architektur wählen. Unter Linux das DEB über die Paketverwaltung installieren oder das AppImage ausführbar machen und starten. Die Mac-Ausgaben sind nicht notarisiert.
+
+Die GitHub-Actions-Pipeline hat alle vier Plattformen gebaut und die Programme tatsächlich gestartet. Der Test bestätigt den HTTP-Empfang, das Speichern in der laufenden Oberfläche und die Quittierung über native IPC. Installer-Dialoge und betriebssystemspezifische Sicherheitsabfragen werden dadurch nicht abgenommen.
 
 Auf einem Mac beziehungsweise Linux-System mit Rust, Node 24+, Bun und den Tauri-Systemvoraussetzungen: `bun install --frozen-lockfile`, `bun run test`, `bunx tauri build`. Auf dem Mac entstehen App/DMG; unter Linux die konfigurierten nativen Pakete. Eine Mac-Notarisierung oder Codesignatur ist nicht enthalten.
 
@@ -40,4 +42,4 @@ Beide Remotion-Templates sind im Video-Studio verfügbar. Für MP4 die Requisite
 
 ## Prüfung und Grenzen
 
-Der aktuelle Prüfstatus steht im Gesamtpaket unter `Quellcode/PRUEFSTATUS-1.4.0.md`. Reale Browser-/Windows-Fensterbedienung konnte bisher wegen der gestoppten Computersteuerung nicht visuell abgenommen werden. Der Regressionstest nutzt eine isolierte DOM-Umgebung; er ersetzt diese Abnahme nicht.
+Der aktuelle Prüfstatus steht im Gesamtpaket unter `Quellcode/PRUEFSTATUS-1.4.0.md`. Windows-Statistik und Schnellwahl sind visuell bestätigt. Das Chromium-ZIP ist in einem echten isolierten Browser geprüft; Firefox wurde temporär installiert. Vollständige Fensterabnahme, der tatsächliche Clipboard-Shortcut in copyNpaste und eine eigene Vision-API bleiben separate Prüfungen. Die Testläufe verwenden synthetische Links und keine privaten Lesezeichen.

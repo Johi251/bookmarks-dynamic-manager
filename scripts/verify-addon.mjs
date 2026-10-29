@@ -41,6 +41,21 @@ try {
   assert.ok(opened.url().endsWith('/manager.html'));
   assert.deepEqual(errors, []);
   console.log('PASS: Echtes Chromium lädt ZIP-Add-on und Service Worker; Speichern, Dubletten, dauerhafter Speicher, Statistik, sechs Schnellaktionen, Popup und Manager-Link funktionieren.');
+  const publicPage = await context.newPage();
+  await publicPage.goto('https://johi251.github.io/bookmarks-dynamic-manager/');
+  await publicPage.getByRole('tab', {name:'Statistik',exact:true}).waitFor();
+  assert.ok((await publicPage.locator('body').innerText()).includes('v1.4.0'));
+  await publicPage.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await publicPage.reload();
+  await publicPage.getByRole('tab', {name:'Statistik',exact:true}).click();
+  await publicPage.getByRole('region', {name:'Statistik',exact:true}).waitFor();
+  await publicPage.waitForFunction(async () => !!(await caches.match(document.querySelector('script[type="module"]').src)));
+  await context.setOffline(true);
+  try {
+    await publicPage.reload();
+    await publicPage.getByRole('tab', {name:'Statistik',exact:true}).waitFor();
+    console.log('PASS: Öffentliche Web-App 1.4.0 lädt, zeigt Statistik und startet nach Cache-Aufbau auch offline.');
+  } finally { await context.setOffline(false); }
 } finally {
   await context?.close();
   await new Promise((done) => server.close(done));
