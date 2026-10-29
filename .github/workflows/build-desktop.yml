@@ -24,6 +24,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
       - run: bun install --frozen-lockfile
       - run: bun run test
+      - run: bun run build:desktop
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
       - run: bun run build:ext
       - if: runner.os == 'Windows'
