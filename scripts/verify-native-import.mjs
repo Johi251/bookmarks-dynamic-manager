@@ -37,10 +37,15 @@ try {
   assert.ok(address,`WebView-Debugadresse fehlt: ${JSON.stringify(created.capabilities)}`);
   browser=await chromium.connectOverCDP(`http://${address}`);
   const context=browser.contexts()[0];
+  context.setDefaultTimeout(15000);
+  context.setDefaultNavigationTimeout(15000);
   const page=context.pages()[0]||await context.waitForEvent('page');
   await page.waitForURL(/tauri\.localhost/);
   await verifyImport(page);
   console.log('PASS: Import-Dateiauswahl und HTML5-Drop in der tatsächlich gebauten Windows-App geprüft.');
+} catch(error) {
+  console.error(`WebDriver-Diagnose: ${log}`);
+  throw error;
 } finally {
   await browser?.close();
   if(session) await call(`/session/${session}`,undefined,'DELETE').catch(()=>undefined);

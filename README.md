@@ -2,7 +2,11 @@
 
 Lokale Lesezeichenverwaltung mit Mehrfachkategorien, Glossar, dynamischen Gruppen, Import/Export, Statistik und optionaler KI-Unterstützung.
 
-**Version 1.4.0.** [Web-App](https://johi251.github.io/bookmarks-dynamic-manager/) · [Downloads und Gesamtpaket](https://github.com/Johi251/bookmarks-dynamic-manager/releases/tag/v1.4.0). Der aktuelle Nachweis ist im Quellpaket unter `PRUEFSTATUS-1.4.0.md` enthalten.
+**Version 1.4.1.** [Web-App](https://johi251.github.io/bookmarks-dynamic-manager/) · [Downloads und Gesamtpaket](https://github.com/Johi251/bookmarks-dynamic-manager/releases/tag/v1.4.1). Der aktuelle Nachweis ist im Quellpaket unter `PRUEFSTATUS-1.4.1.md` enthalten.
+
+## Importkorrektur in 1.4.1
+
+Die Importfläche öffnet jetzt einen echten Dateieingang für HTML/HTM oder JSON. Der fehlende Eingang hatte die Dateiauswahl vollständig verhindert. Im Desktop ist zusätzlich der native Tauri-Drop-Handler abgeschaltet, damit externe Dateien die HTML5-Dropfläche erreichen. Auswählen und Ablegen werden bis zum gespeicherten Bestand nach Neuladen geprüft.
 
 ## Änderungen in 1.4.0
 
@@ -31,7 +35,7 @@ Lokale Lesezeichenverwaltung mit Mehrfachkategorien, Glossar, dynamischen Gruppe
 
 ## Ausgabeformen und Installation
 
-Der Release für 1.4.0 enthält die portable Windows-EXE, einen NSIS-Installer, Mac-DMGs für Apple Silicon und Intel, Linux-DEB/AppImage, Chrome-/Firefox-ZIPs und das Gesamtpaket. Siehe die mitgelieferte Übergabeanleitung.
+Der Release für 1.4.1 enthält die portable Windows-EXE, einen NSIS-Installer, Mac-DMGs für Apple Silicon und Intel, Linux-DEB/AppImage, Chrome-/Firefox-ZIPs und das Gesamtpaket. Siehe die mitgelieferte Übergabeanleitung.
 
 - **Windows:** Portable EXE starten oder Installer verwenden. WebView2 wird benötigt. Die Pakete sind nicht signiert.
 - **Chrome/Edge/Brave:** ZIP entpacken, Entwicklermodus unter `chrome://extensions`, „Entpackte Erweiterung laden“.
@@ -77,8 +81,10 @@ bun run package:all
 
 Bun ist der Paketmanager; der reparierte Bun-Lockfile ist maßgeblich. Der veraltete npm-Lockfile wurde in den Papierkorb verschoben.
 
-Der Prüfstand umfasst Typprüfung, 78 ursprüngliche Logikprüfungen, 29 zusätzliche Regression-/Worker-/DOM-Tests und drei Rust-Tests. Alle vier nativen Runner haben die echte App gestartet und einen HTTP-Testeingang nach Speicherung über native IPC quittiert. Beide Videoformate wurden als MP4 gerendert.
+Der Prüfstand umfasst Typprüfung, 78 ursprüngliche Logikprüfungen, 30 zusätzliche Regression-/Worker-/DOM-Tests und drei Rust-Tests. Die nativen Runner starten die echte App und prüfen die Quittierung eines HTTP-Testeingangs nach Speicherung über native IPC. Beide Videoformate wurden als MP4 gerendert. Den versionsbezogenen Abschluss belegt der aktuelle Prüfstatus.
 
 Das echte Chromium-Add-on wurde aus seinem ZIP installiert und auf Speichern, Dubletten, Bestand nach Neuladen, Statistik, Schnellwahl und Popup geprüft. Firefox 158 hat sein ZIP temporär installiert; dessen vollständige Fensterbedienung wurde nicht automatisiert. Der Mozilla-Linter meldet null Fehler und drei Warnungen: fehlende Datenverarbeitungsdeklaration für eine spätere Store-Einreichung und zwei React-interne `innerHTML`-Stellen. Die Anwendung reicht keine eigenen unbereinigten Inhalte an diese React-Schnittstelle weiter.
 
 Windows-Statistik und Schnellwahl wurden zusätzlich visuell geprüft. Der tatsächliche Weg Strg+C → copyNpaste → Today's Hunt ist mit der finalen Windows-App bestätigt. Auch die öffentliche Web-App wurde in echtem Chromium online und nach Cache-Aufbau offline gestartet. Die nativen Starttests prüfen die Programme direkt; Installer-Dialoge und Gatekeeper sind nicht abgenommen. Eine echte kostenpflichtige Vision-API wurde nicht aufgerufen.
+
+Die Hakenanimation befindet sich im copyNpaste-Magazin. Die sechs Schnellaktionen sind in allen Bookmarks-Oberflächen verfügbar; eine vollständig ausgearbeitete Ausklappanimation und ein systemweites Haken-Overlay am ursprünglichen Link sind bisher nicht umgesetzt.

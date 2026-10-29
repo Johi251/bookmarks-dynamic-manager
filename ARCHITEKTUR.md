@@ -36,13 +36,15 @@ Der native Empfänger nimmt begrenzte JSON-POSTs von copyNpaste auf Port 9911 en
 
 Statistik, Sortierung, Mehrfachaktionen und Shortcuts sind an den zentralen Zustand angeschlossen. Die kreisförmige Schnellwahl besitzt sechs zugängliche Aktionsbuttons und einen beschrifteten Toggle. Große Videokomponenten werden bei Bedarf unter einer Suspense-Grenze geladen. Der Kompaktmodus kann auch den lokalen Bereitstellungsdialog öffnen.
 
-Die Native- und Add-on-Icons stammen aus dem orangefarbenen SVG. Paketierung verwendet ausschließlich standardisierte UTF-8-ZIP-Pfade. Der Paketierer löscht keine vorherigen Releases. Tauri-, Web- und Add-on-Versionen sind einheitlich 1.4.0.
+Die Native- und Add-on-Icons stammen aus dem orangefarbenen SVG. Paketierung verwendet ausschließlich standardisierte UTF-8-ZIP-Pfade. Der Paketierer löscht keine vorherigen Releases. Tauri-, Web- und Add-on-Versionen sind einheitlich 1.4.1.
 
-Der manuelle Workflow hat Windows x64, Mac Apple Silicon/Intel und Linux amd64 erfolgreich gebaut. Jede gebaute App wurde gestartet; ein echter HTTP-Eingang wurde nach Speicherung über native IPC quittiert. Die nativen Pakete werden direkt als Release-Assets übertragen, ohne zusätzlichen Actions-Artefaktspeicher. Der Desktop-Einstieg `desktop-1.4.0.html` verhindert alte index.html-Antworten aus dem WebView-Cache; die Bootstrap-Logik registriert im Desktop keinen PWA-Worker.
+Der manuelle Workflow baut Windows x64, Mac Apple Silicon/Intel und Linux amd64. Jede gebaute App wird gestartet; ein echter HTTP-Eingang wird nach Speicherung über native IPC quittiert. Die nativen Pakete werden direkt als Release-Assets übertragen, ohne zusätzlichen Actions-Artefaktspeicher. Der Desktop-Einstieg `desktop-1.4.1.html` verhindert alte index.html-Antworten aus dem WebView-Cache; die Bootstrap-Logik registriert im Desktop keinen PWA-Worker.
+
+Der Importdialog führt Dateiauswahl und HTML5-Datei-Drop in denselben Parser-/Speicherweg. `dragDropEnabled: false` gibt HTML5-Datei-Drops unter Windows frei. Ein zusätzlicher WebDriver-Test bleibt optional: Seine Verbindung zum Windows-WebView kam auf dem CI-Runner bisher nicht zustande. Dieser Versuch ist kein bestandener Importnachweis. Die veröffentlichte App erhält keine Debug-Parameter.
 
 ## Aktuelle Grenzen
 
-- Die Web-Auslieferung auf GitHub steht auf 1.4.0. Native Programme sind auf allen vier Zielsystem-Runnern gestartet; vollständige Installer-/Fensterabnahme bleibt davon getrennt.
+- Die Web-Auslieferung auf GitHub steht auf 1.4.1. Versionsbezogene native Prüfungen stehen im aktuellen Prüfstatus; vollständige Installer-/Fensterabnahme bleibt davon getrennt.
 - Kein Cloud-Sync zwischen den lokalen Beständen.
 - Keine kostenlose oder kompatible KI-API ohne konkrete Providerprüfung zugesichert.
 - Chromium-Add-on mit echten Browser-APIs geprüft; Firefox temporär installiert. Strg+C → copyNpaste → Today's Hunt mit finaler Windows-App bestätigt. Vollständige Firefox-Fensterbedienung bleibt separat offen.
