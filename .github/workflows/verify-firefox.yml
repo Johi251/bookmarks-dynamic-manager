@@ -1,0 +1,22 @@
+name: Echtes Firefox-Add-on prüfen
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firefox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+      - run: bun install --frozen-lockfile
+      - run: bun run build:ext
+      - run: firefox --version
+      - run: geckodriver --version
+      - run: node scripts/verify-firefox.mjs
